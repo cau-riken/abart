@@ -1,0 +1,3 @@
+[submodule "worker/app-ants-marmosetatlas-registration"]
+	path = worker/app-ants-marmosetatlas-registration
+	url = https://github.com/cau-riken/app-ants-marmosetatlas-registration.git

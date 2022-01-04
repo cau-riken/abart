@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+FROM cauriken/ants_build:latest
+
+RUN mkdir /abart
+WORKDIR /abart
+
+COPY ./app-ants-marmosetatlas-registration/template/  /abart/template/
+COPY ./app-ants-marmosetatlas-registration/do_registration.sh  /abart/
+COPY ./main_fordocker.sh  /abart/
+RUN chmod a+x /abart/main_fordocker.sh /abart/do_registration.sh ;
+
+RUN apt-get update \
+    && apt-get install -y jq
+
+ENV ANTSPATH="/opt/ants/bin" \
+    PATH="/opt/ants/bin:$PATH" \
+    LD_LIBRARY_PATH="/opt/ants/lib:$LD_LIBRARY_PATH"
+
+ENTRYPOINT [ "/abart/main_fordocker.sh" ]  
+
+LABEL jp.riken.cau.product="ANTs based Atlas Registration Tool - Worker" \
+      jp.riken.cau.version="0.1.0" \
+      jp.riken.cau.release-date="2022-01-04"
+

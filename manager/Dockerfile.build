@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.17 AS builder
+RUN mkdir /build
+COPY .  /build/
+WORKDIR /build
+RUN GOOS=linux CGO_ENABLED=0 go build -ldflags='-extldflags=-static' -o abart-manager ./abart-manager.go
+
+FROM alpine:3.14
+COPY --from=builder /build/abart-manager /
+
+ENTRYPOINT [ "/abart-manager" ]
+
+LABEL jp.riken.cau.product="ANTs based Atlas Registration Tool - Manager" \
+    jp.riken.cau.version="0.1.0" \
+    jp.riken.cau.release-date="2022-01-04"
+
+EXPOSE 10000

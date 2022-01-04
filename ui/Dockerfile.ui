@@ -1,0 +1,43 @@
+# temporary image used as build environment
+FROM node:14.18.0-alpine as build
+
+
+WORKDIR /app
+ENV PATH /app/node_modules/.bin:$PATH
+
+# copy required files from context
+COPY package.json ./
+COPY package-lock.json ./
+
+
+# download and install node modules
+RUN npm install --no-optional
+
+#copy sources
+COPY . ./
+
+#generate bundle
+RUN npm run build
+
+# production environment
+FROM nginx:1.20.2-alpine
+
+LABEL jp.riken.cau.product="ANTs based Atlas Registration Tool - User Interface" \
+    jp.riken.cau.version="0.1.0" \
+    jp.riken.cau.release-date="2022-01-04"
+
+# copy generated bundles and assets from building stage image
+COPY --from=build /app/dist/index.html /usr/share/nginx/html
+COPY --from=build /app/dist/main.* /usr/share/nginx/html/
+COPY --from=build /app/dist/models /usr/share/nginx/html/models
+
+#make a template from NginX default config to include reverse proxy settings with references to environment variables that will be resolved at run time.
+RUN mkdir /etc/nginx/templates/ ; \
+    tac /etc/nginx/conf.d/default.conf | \
+    sed 's|^}|}\n location /abart/api/ { proxy_pass http://\${ABART_MGR_IP}:\${ABART_MGR_PORT}/api/; }\n client_max_body_size \${ABART_UPLOAD_MAXSIZE};|' | \   
+    tac > /etc/nginx/templates/default.conf.template ; \
+    rm /etc/nginx/conf.d/default.conf;
+
+# port which NginX listens to 
+EXPOSE 80
+
