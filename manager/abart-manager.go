@@ -501,9 +501,10 @@ func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
 				ReadBufferSize:  1024,
 				WriteBufferSize: 1024,
 				CheckOrigin: func(r *http.Request) bool {
-					//used when debugging
 					origin := r.Header.Get("Origin")
-					return origin == "http://localhost:9000"
+					//origin when debugging or when running in Desktop mode
+					return origin == "http://localhost:9000" ||
+						origin == "http://localhost:9090"
 				},
 			}
 
@@ -644,7 +645,7 @@ func handleRequests() {
 		//FIXME
 		//handlers.AllowedOrigins([]string{"*"}),
 		//during debug, direct access of the API
-		handlers.AllowedOrigins([]string{"http://localhost:9000"}),
+		handlers.AllowedOrigins([]string{"http://localhost:9000", "http://localhost:9090"}),
 
 		//browser may cache the Options reponse for up to 1 hour (expressed in seconds)
 		handlers.MaxAge(3600),
