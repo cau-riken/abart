@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM cauriken/ants_build:latest
+FROM rikencau/ants_build:latest
 
 RUN mkdir /abart
 WORKDIR /abart
