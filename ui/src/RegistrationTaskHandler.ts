@@ -31,7 +31,7 @@ export class RegistrationTask {
     //from containerized UI (through reverse proxy)
     /*
     static ApiHost = "";
-    static ApiProt = "";
+    static ApiPort = "";
     static ApiPrefix = "/abart/api";
     */
 
@@ -103,23 +103,31 @@ export class RegistrationTask {
 
     //-------------------------------------------------------------------------
     taskId: string | null = null;
+    taskStatus: string = 'pending';
     taskParams: TaskParams;
 
     hasStarted() {
         return this.taskId != null;
     };
 
-    cancel() {
+    isCanceled() {
+        return this.taskStatus.startsWith('cancel');
+    };
+
+    cancel(onDone: () => void) {
         axios.put(
             RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/cancel'
         )
-            .then(function (response) {
-                console.log(response);
+            .then((response) => {
+                this.taskStatus = response.data.status;
+                onDone();
             })
             .catch(function (error) {
                 console.log(error);
+                onDone();
             });
-
+        this.taskStatus = 'canceling';
+        return this;
     };
 
 }

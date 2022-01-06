@@ -13,6 +13,8 @@ import { NIfTILoader } from '../loaders/NIfTILoader';
 import {
     Alert,
     Button,
+    Intent,
+    ProgressBar,
     Slider,
     Spinner,
     SpinnerSize,
@@ -131,7 +133,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [indexY, setIndexY] = React.useState(0);
     const [indexZ, setIndexZ] = React.useState(0);
 
-    const [remoteTask, setRemoteTask] = React.useState<RegistrationTask | null>();
+    const [remoteTask, setRemoteTask] = React.useState<RegistrationTask>();
     const [showLogs, setShowLogs] = React.useState(false);
     const [loglines, setLoglines] = React.useState<string[]>([]);
 
@@ -518,7 +520,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     margin: 2,
                     width: 'calc(100% - 4px)', height: 'calc(100% - 4px)',
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 6fr) minmax(190px, 2fr)' ,
+                    gridTemplateColumns: 'minmax(0, 6fr) minmax(190px, 2fr)',
                     gap: '1px 3px',
                     overflow: 'hidden',
                 }}
@@ -767,7 +769,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             <Button
                                 className="big-button"
                                 icon="confirm"
-                                disabled={!props.volumeFile}
+                                disabled={!props.volumeFile || (remoteTask && remoteTask.hasStarted())}
                                 onClick={() => {
                                     const params = { param1: "value1" };
                                     const task = RegistrationTask.create(
@@ -785,9 +787,25 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 icon="delete"
                                 disabled={!remoteTask || !remoteTask.hasStarted()}
                                 onClick={() => {
-                                    remoteTask?.cancel();
+                                    const updatedTask = remoteTask?.cancel(
+                                        () => {
+                                            setRemoteTask(undefined);
+                                            setShowLogs(false);
+                                        });
+                                    setRemoteTask(updatedTask);
                                 }} >cancel</Button>
 
+                        </div>
+                        <div style={{ height: 10, margin: "4px 6px", padding: "0 10px" }}>
+                            {
+                                remoteTask
+                                    ?
+                                    <ProgressBar
+                                        intent={remoteTask.isCanceled() ? Intent.WARNING : Intent.PRIMARY}
+                                    />
+                                    :
+                                    null
+                            }
                         </div>
                         <Switch
                             checked={showLogs}
