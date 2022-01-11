@@ -44,10 +44,10 @@ export class RegistrationTask {
         );
     }
 
-    static create(volumeFile: File, taskParams: TaskParams, loglines: (lines: string[]) => void): RegistrationTask {
+    static create(volumeFile: File, taskParams: TaskParams, onDone: (task?: RegistrationTask) => void, loglines: (lines: string[]) => void): RegistrationTask {
 
         const task = new RegistrationTask(taskParams);
-        this.uploadFile(volumeFile, task, loglines);
+        this.uploadFile(volumeFile, task, onDone, loglines);
         return task;
     }
 
@@ -62,7 +62,12 @@ export class RegistrationTask {
             });
     }
 
-    static uploadFile(file: File, task: RegistrationTask, loglines: (lines: string[]) => void) {
+    static uploadFile(
+        file: File,
+        task: RegistrationTask,
+        onDone: (task?: RegistrationTask) => void,
+        loglines: (lines: string[]) => void
+    ) {
         const formData = new FormData();
         formData.append("inputDataFile", file);
         formData.append("params", JSON.stringify(task.taskParams));
@@ -89,9 +94,10 @@ export class RegistrationTask {
                         //console.log(event.data);
                     }
                 }, 10);
-
+                onDone(task);
             })
             .catch(function (error) {
+                onDone(undefined);
                 console.log(error);
             });
     }

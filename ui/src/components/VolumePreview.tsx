@@ -5,7 +5,7 @@ import * as THREE from 'three';
 
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
-import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
+import { ArcballControls } from 'three/examples/jsm/controls/ArcballControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
 import { NIfTILoader } from '../loaders/NIfTILoader';
@@ -71,8 +71,10 @@ function useSize(target: HTMLDivElement) {
 
 export type RealTimeState = {
     fixedWire: boolean,
-    brainWireRotation: number[],
-    camRotation: number[],
+    brainWireInitRotation: THREE.Quaternion,
+    deltaRotation: number[],
+    stopQ: THREE.Quaternion,
+    camDistance: number,
 };
 
 export type Obj3dRefs = {
@@ -86,15 +88,19 @@ export type Obj3dRefs = {
     aspect2: number,
 
     camera: THREE.PerspectiveCamera,
-    initCameraMat: THREE.Matrix4,
+    scene: THREE.Scene,
 
     camera2: THREE.PerspectiveCamera,
-    controls: TrackballControls,
+    scene2: THREE.Scene,
+    controls: ArcballControls,
 
     volume: Volume,
     sliceX: VolumeSlice,
     sliceY: VolumeSlice,
     sliceZ: VolumeSlice,
+
+    boxAniMixer: THREE.AnimationMixer,
+    boxAninAction: THREE.AnimationAction,
 };
 
 
@@ -118,16 +124,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const obj3d = React.useRef<Obj3dRefs>({});
 
-    const [camRotation, setCamRotation] = React.useState([0, 0, 0]);
-    const [brainWireRotation, setBrainWireRotation] = React.useState([0.5, 2.0, 0.20]);
-    const [fixedWire, setFixedWire] = React.useState(true);
-
+    const [deltaRotation, setDeltaRotation] = React.useState([0, 0, 0]);
 
     const [showWire, setShowWire] = React.useState(true);
+    const [brainWireInitRotation, setBrainWireInitRotation] = React.useState(new THREE.Quaternion());
+    const [fixedWire, setFixedWire] = React.useState(false);
 
-    const [showXSlice, setShowXSlice] = React.useState(true);
+    const [showXSlice, setShowXSlice] = React.useState(false);
     const [showYSlice, setShowYSlice] = React.useState(false);
-    const [showZSlice, setShowZSlice] = React.useState(false);
+    const [showZSlice, setShowZSlice] = React.useState(true);
 
     const [indexX, setIndexX] = React.useState(0);
     const [indexY, setIndexY] = React.useState(0);
@@ -140,9 +145,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const rtState = React.useRef<RealTimeState>({});
     React.useEffect(() => {
         rtState.current = {
+            ...rtState.current,
             fixedWire,
-            camRotation,
-            brainWireRotation,
+            deltaRotation,
+            brainWireInitRotation,
         };
     });
 
@@ -151,12 +157,18 @@ const VolumePreview = (props: VolumePreviewProps) => {
         objectURLs.current.forEach((url) => URL.revokeObjectURL(url));
     }
 
+    //when Volume changed (as a result of local file selection) 
     React.useEffect(() => {
 
-        setCamRotation([0, 0, 0]);
-        setBrainWireRotation([0, 0, 0]);
-        setShowXSlice(true);
-        setShowYSlice(true);
+        setDeltaRotation([0, 0, 0]);
+        rtState.current.stopQ = new THREE.Quaternion();
+
+        setShowWire(true);
+        setBrainWireInitRotation(new THREE.Quaternion());
+        setFixedWire(false);
+
+        setShowXSlice(false);
+        setShowYSlice(false);
         setShowZSlice(true);
 
         if (props.volumeFile) {
@@ -201,12 +213,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 const camera = new THREE.PerspectiveCamera(60, aspect, 0.01, 1e10);
 
                 obj3d.current.camera = camera;
-                obj3d.current.initCameraMat = camera.matrix.clone();
 
                 //main scene
                 const scene = new THREE.Scene();
                 scene.add(camera);
-
+                obj3d.current.scene = scene;
 
                 // light
                 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
@@ -231,13 +242,26 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             //box helper to see the extend of the volume
                             const geometry = new THREE.BoxGeometry(volume.xLength, volume.yLength, volume.zLength);
                             const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                            //const material = new THREE.LineBasicMaterial( { color: 0x8080ff, fog: false, transparent: true, opacity: 0.6 } );
                             const cube = new THREE.Mesh(geometry, material);
                             cube.visible = false;
-                            const box = new THREE.BoxHelper(cube);
+                            const box = new THREE.BoxHelper(cube, 0xffff00);
 
                             scene.add(box);
                             box.applyMatrix4(volume.matrix);
                             scene.add(cube);
+                            obj3d.current.box = box;
+
+                            //animation to make the box visible only when camera is moved (rotation, "zoom")
+                            const visibilityKF = new THREE.BooleanKeyframeTrack('.visible', [0, 0.2], [true, false]);
+                            const clip = new THREE.AnimationClip('InAndOut', -1, [visibilityKF]);
+                            const mixer = new THREE.AnimationMixer(box);
+                            const action = mixer.clipAction(clip);
+                            action.setLoop(THREE.LoopOnce, 1);
+                            obj3d.current.boxAniMixer = mixer;
+                            obj3d.current.boxAninAction = action;
+
+                            box.visible = false;
 
                             //z plane
                             const initSliceZ = Math.floor(volume.dimensions[2] / 4);
@@ -266,79 +290,32 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
                             const mriBbox = new THREE.Box3().setFromObject(cube);
-                            const [mboxXLen, mboxYLen, mboxZLen] = mriBbox.max.toArray();
-                            camera.position.z = 6 * mboxZLen;
+                            const mboxZLen = mriBbox.max.toArray()[2];
+                            const camDistance = 6 * mboxZLen;
+                            camera.position.z = camDistance;
+                            rtState.current.camDistance = camDistance;
+                            camera.getWorldQuaternion(rtState.current.stopQ);
+
+                            initBrainWire(scene, mriBbox.max.toArray());
 
 
-                            const objloader = new OBJLoader();
-                            const wireColor = new THREE.Color(0xFF88FF)
-                            //objloader.setMaterials(objmaterial);
-                            objloader.load("models/bma_sp2-lh.surf-simpld.obj", function (leftHemisphere) {
+                            const controls = new ArcballControls(camera, renderer.domElement, scene);
 
-                                //update left-hemisphere to display as wireframe
-                                leftHemisphere.traverse(function (child) {
-                                    if (child.isMesh) {
-                                        child.material.wireframe = true;
-                                        child.material.color = wireColor;
-                                        //child.material.opacity = 0.9;
-                                        //child.material.transparent = true;
+                            controls.addEventListener('change', (e) => {
 
-                                    }
-                                });
-                                //create right-hemisphere by mirroring through sagittal (median) plane
-                                const rightHemisphere = leftHemisphere.clone();
+                                //keep the brain wireframe in sync with camera rotation to make it look like it's static
+                                updateBrainWireRotation();
 
-                                const mirrorMatrix = new THREE.Matrix4().set(
-                                    -1, 0, 0, 0,
-                                    0, 1, 0, 0,
-                                    0, 0, 1, 0,
-                                    0, 0, 0, 1
-                                );
-                                rightHemisphere.applyMatrix4(mirrorMatrix);
-
-                                //group both hemisphere
-                                const brainWire = new THREE.Group();
-                                brainWire.add(leftHemisphere);
-                                brainWire.add(rightHemisphere);
-
-                                //scale brainwire to roughly fit image dimension 
-                                const sf = 0.75;
-                                var templBbox = new THREE.Box3().setFromObject(brainWire);
-
-                                const [brainboxXLen, brainboxYLen, brainboxZLen] = templBbox.max.toArray();
-                                const scaleTemplMatrix = new THREE.Matrix4().set(
-                                    sf * mboxXLen / brainboxXLen, 0, 0, 0,
-                                    0, sf * mboxYLen / brainboxYLen, 0, 0,
-                                    0, 0, sf * mboxZLen / brainboxZLen, 0,
-                                    0, 0, 0, 1
-                                );
-                                brainWire.applyMatrix4(scaleTemplMatrix);
-
-
-                                scene.add(brainWire);
-
-                                obj3d.current.brainWire = brainWire;
-
-                                const controls = new TrackballControls(camera, renderer.domElement);
-                                controls.addEventListener('change', () => {
-
-                                    //keep the brain wireframe in sync with camera rotation to make it look like it's static
-                                    if (rtState.current.fixedWire) {
-                                        brainWire.rotation.copy(camera.rotation);
-                                        brainWire.updateMatrix();
-                                    }
-                                    setCamRotation(camera.rotation.toArray());
-
-                                });
-                                obj3d.current.controls = controls;
-
-                                controls.minDistance = 50;
-                                controls.maxDistance = 500;
-                                controls.rotateSpeed = 5.0;
-                                controls.zoomSpeed = 5;
-                                controls.panSpeed = 2;
+                                //show Volume's bounding-box while rotating
+                                obj3d.current.boxAninAction.stop();
+                                obj3d.current.boxAninAction.play();
 
                             });
+                            obj3d.current.controls = controls;
+
+                            controls.minDistance = 50;
+                            controls.maxDistance = 500;
+                            controls.enablePan = false;
 
                         }
 
@@ -362,26 +339,19 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 //---------------------------------------------------------------------
                 // second renderer in an inset to display main view axis orientation 
                 const { insetScene: scene2, insetCamera: camera2 } = setupInset(obj3d.current.aspect2, camera);
+                obj3d.current.camera2 = camera2;
+                obj3d.current.scene2 = scene2;
 
                 //---------------------------------------------------------------------
-
+                const clock = new THREE.Clock();
                 const animate = function () {
 
                     requestAnimationFrame(animate);
 
-                    if (obj3d.current.controls) {
-                        obj3d.current.controls.update();
-
-                        //---------------------------------------------------------------------
-                        //update inset
-                        //copy position of the camera into inset
-                        camera2.position.copy(camera.position);
-                        camera2.position.sub(obj3d.current.controls.target);
-                        camera2.position.setLength(300);
-                        camera2.lookAt(scene2.position);
-
-                        obj3d.current.renderer2.render(scene2, camera2);
-                        //---------------------------------------------------------------------
+                    updateInset();
+                    if (obj3d.current.boxAniMixer) {
+                        const delta = clock.getDelta();
+                        obj3d.current.boxAniMixer.update(delta);
                     }
                     renderer.render(scene, camera);
 
@@ -397,6 +367,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     );
 
 
+    //handle resize
     React.useEffect(() => {
         if (obj3d.current.renderer) {
             const renderer = obj3d.current.renderer;
@@ -410,7 +381,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 if (obj3d.current.camera) {
                     obj3d.current.camera.aspect = aspect;
                     obj3d.current.camera.updateProjectionMatrix();
-                    obj3d.current.controls.handleResize();
+                    //obj3d.current.controls.handleResize();
                 }
             }
         }
@@ -418,8 +389,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
     );
 
 
+    //after component is mounted
     React.useEffect(() => {
 
+        //set-up renderers
         const volRendCont = volRendererContainer.current;
         if (volRendCont) {
             const renderer = new THREE.WebGLRenderer({
@@ -456,10 +429,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
             obj3d.current.renderer2 = renderer2;
             obj3d.current.aspect2 = aspect2;
-
-
         }
-        //---------------------------------------------------------------------
+
+        //dispose renderers
         return () => {
             if (obj3d.current.volume) {
                 //explicitely release slices to prevent leak (since the hold a back reference to the volume)
@@ -485,6 +457,121 @@ const VolumePreview = (props: VolumePreviewProps) => {
         }
 
     }, []);
+
+    const updateInset = () => {
+        if (obj3d.current.controls) {
+            //copy position of the camera into inset
+            obj3d.current.camera2.position.copy(obj3d.current.camera.position);
+            obj3d.current.camera2.position.sub(obj3d.current.controls.target);
+            obj3d.current.camera2.position.setLength(300);
+            obj3d.current.camera2.lookAt(obj3d.current.scene2.position);
+
+            obj3d.current.renderer2.render(obj3d.current.scene2, obj3d.current.camera2);
+        }
+    }
+
+    const initBrainWire = (scene: THREE.Scene, bboxMax: number[]) => {
+
+        const [mboxXLen, mboxYLen, mboxZLen] = bboxMax;
+
+        const objloader = new OBJLoader();
+        const wireColor = new THREE.Color(0xFF88FF)
+        //objloader.setMaterials(objmaterial);
+        objloader.load("models/bma_sp2-lh.surf-simpld.obj", function (leftHemisphere) {
+
+            //update left-hemisphere to display as wireframe
+            leftHemisphere.traverse(function (child) {
+                if (child.isMesh) {
+                    child.material.wireframe = true;
+                    child.material.color = wireColor;
+                    //child.material.opacity = 0.9;
+                    //child.material.transparent = true;
+
+                }
+            });
+            //create right-hemisphere by mirroring through sagittal (median) plane
+            const rightHemisphere = leftHemisphere.clone();
+
+            const mirrorMatrix = new THREE.Matrix4().set(
+                -1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+            );
+            rightHemisphere.applyMatrix4(mirrorMatrix);
+
+            //group both hemisphere
+            const brainWire = new THREE.Group();
+            brainWire.add(leftHemisphere);
+            brainWire.add(rightHemisphere);
+
+            //scale brainwire to roughly fit image dimension 
+            const sf = 0.75;
+            var templBbox = new THREE.Box3().setFromObject(brainWire);
+
+            const [brainboxXLen, brainboxYLen, brainboxZLen] = templBbox.max.toArray();
+            const scaleTemplMatrix = new THREE.Matrix4().set(
+                sf * mboxXLen / brainboxXLen, 0, 0, 0,
+                0, sf * mboxYLen / brainboxYLen, 0, 0,
+                0, 0, sf * mboxZLen / brainboxZLen, 0,
+                0, 0, 0, 1
+            );
+            brainWire.applyMatrix4(scaleTemplMatrix);
+            scene.add(brainWire);
+            obj3d.current.brainWire = brainWire;
+
+
+            const initialQ = new THREE.Quaternion();
+            brainWire.getWorldQuaternion(initialQ);
+            setBrainWireInitRotation(initialQ);
+
+        });
+    };
+
+
+
+    const getRotationOffset = () => {
+        //current camera rotation
+        const camQ = new THREE.Quaternion();
+        obj3d.current.camera.getWorldQuaternion(camQ);
+
+        //last updated brainwire rotation 
+        const initQ = new THREE.Quaternion().copy(rtState.current.brainWireInitRotation)
+
+        const updatedQ = camQ.invert().multiply(rtState.current.stopQ).multiply(initQ);
+        return updatedQ;
+    };
+
+    const getBWRotationOffset = () => {
+        //concatenate initial rotation of brainwire to camera rotation
+        const camQ = new THREE.Quaternion();
+        obj3d.current.camera.getWorldQuaternion(camQ);
+        return camQ.multiply(rtState.current.brainWireInitRotation);
+    };
+
+    const updateBrainWireRotation = (force: boolean = false) => {
+        if (rtState.current.fixedWire || force) {
+
+            obj3d.current.brainWire.up.copy(obj3d.current.camera.up);
+            const rotOffset = getBWRotationOffset();
+            obj3d.current.brainWire.setRotationFromQuaternion(rotOffset);
+        }
+        setDeltaRotation(
+            obj3d.current.brainWire.rotation.toArray()
+        );
+
+    };
+
+    const setCameraRotation = (up: number[], position: number[]) => {
+        obj3d.current.controls.reset();
+        obj3d.current.camera.up.fromArray(up);
+        obj3d.current.camera.position.fromArray(position);
+        obj3d.current.camera.lookAt(0, 0, 0);
+
+        updateBrainWireRotation();
+        updateInset();
+    };
+
 
     return (
 
@@ -609,75 +696,112 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     }}
                 >
                     <div>
-                        <Button icon="reset"
-                            onClick={() => {
-                                if (obj3d.current.controls) {
-                                    obj3d.current.controls.reset();
-                                }
-                            }}
-
-                        >reset Camera</Button>
 
                         <div
-                            style={{ height: 30, display: 'flex', flexDirection: 'row', justifyContent: 'space-evenly' }}
+                            style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
                         >
-
-
-                            {obj3d.current.camera ?
-                                <>
-                                    <span>{THREE.MathUtils.radToDeg(camRotation[0]).toFixed(2) + '°'}</span>
-                                    <span>{THREE.MathUtils.radToDeg(camRotation[1]).toFixed(2) + '°'}</span>
-                                    <span>{THREE.MathUtils.radToDeg(camRotation[2]).toFixed(2) + '°'}</span>
-                                </>
-                                :
-                                null
-                            }
-                        </div>
-                        <Switch
-                            checked={fixedWire}
-                            label="Fixed brain wire"
-                            onChange={() => {
-                                setFixedWire(!fixedWire);
-
-                                setBrainWireRotation(obj3d.current.brainWire.rotation.toArray());
-                            }}
-                        />
-                        <div
-                            style={{ height: 30, display: 'flex', flexDirection: 'row', justifyContent: 'space-evenly' }}
-                        >
-
-
-                            {obj3d.current.camera ?
-                                <>
-                                    <span>{THREE.MathUtils.radToDeg(brainWireRotation[0]).toFixed(2) + '°'}</span>
-                                    <span>{THREE.MathUtils.radToDeg(brainWireRotation[1]).toFixed(2) + '°'}</span>
-                                    <span>{THREE.MathUtils.radToDeg(brainWireRotation[2]).toFixed(2) + '°'}</span>
-                                </>
-                                :
-                                null
-                            }
+                            <span>Brain wire:</span>
+                            <Switch
+                                checked={showWire}
+                                disabled={!obj3d.current.volume}
+                                label="visible"
+                                onChange={() => {
+                                    setShowWire(!showWire);
+                                    obj3d.current.brainWire.visible = !showWire;
+                                }}
+                            />
+                            <span></span>
                         </div>
 
-                        <Switch
-                            checked={showWire}
-                            label="Show Brain wire"
-                            onChange={() => {
-                                setShowWire(!showWire);
-                                obj3d.current.brainWire.visible = !showWire;
+                        <div
+                            style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
+                        >
+                            <span>Brain wire orientation:</span>
+                            <Switch
+                                checked={fixedWire}
+                                disabled={!obj3d.current.volume}
+                                label="fixed"
+                                onChange={() => {
+                                    setFixedWire(!fixedWire);
 
-                            }}
-                        />
+                                    if (fixedWire) {
+                                        //from now on brainwire will look like it's moving along the camera
+                                        //(but it is actually static)
+
+                                        //camera rotation when stoping updating brainwire rotation
+                                        obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
+
+                                    } else {
+                                        //from now on brainwire will look like it's fixed in its current pos
+                                        //(but it is actually being rotated)
+
+                                        setBrainWireInitRotation(getRotationOffset());
+                                    }
+                                }}
+                            />
+                            <Button icon="reset"
+                                disabled={!obj3d.current.volume}
+
+                                onClick={() => {
+                                    //update directly, rerender will happen before REact UseEffects are processed 
+                                    rtState.current.brainWireInitRotation = new THREE.Quaternion();
+                                    setBrainWireInitRotation(rtState.current.brainWireInitRotation);
+                                    updateBrainWireRotation(true);
+                                }}
+
+                            >Reset</Button>
+                        </div>
+
+                        <div
+                            style={{ 
+                                marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
+                                display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
+                        >
+
+                            <span>Volume orientation :</span>
+                            <Button icon="reset"
+                                disabled={!obj3d.current.volume}
+
+                                onClick={() => {
+                                    if (obj3d.current.controls) {
+                                        obj3d.current.controls.reset();
+                                    }
+                                }}
+
+                            >Reset</Button>
+                        </div>
+
+                        <div
+                            style={{ 
+                                
+                            display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
+                        >
+
+                            <span>Orientation difference:</span>
+
+                                <>
+                                    <span
+                                    >{THREE.MathUtils.radToDeg(deltaRotation[0]).toFixed(2) + '°'}</span>
+                                    <span
+                                    >{THREE.MathUtils.radToDeg(deltaRotation[1]).toFixed(2) + '°'}</span>
+                                    <span
+                                    >{THREE.MathUtils.radToDeg(deltaRotation[2]).toFixed(2) + '°'}</span>
+                                </>
+                            <span></span>
+                        </div>
+
+
 
                         <div
                         >
 
 
-                            <div style={{ marginTop: 16 }}>
+                            <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
 
                                 <Switch
                                     checked={showXSlice}
                                     disabled={!obj3d.current.sliceX}
-                                    label="X slices"
+                                    label="Sagittal (X) slices"
                                     onChange={() => {
                                         if (obj3d.current.sliceX) {
                                             setShowXSlice(!showXSlice);
@@ -700,12 +824,31 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
                                     }}
                                 />
+                                <div
+                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                >
+                                    <Button
+                                        disabled={!obj3d.current.volume}
+
+                                        onClick={() => {
+                                            setCameraRotation([0, 0, 1], [- rtState.current.camDistance, 0, 0]);
+                                        }}
+                                    >L</Button>
+                                    <Button
+                                        disabled={!obj3d.current.volume}
+                                        onClick={() => {
+                                            setCameraRotation([0, 0, 1], [rtState.current.camDistance, 0, 0]);
+                                        }}
+                                    >R</Button>
+
+                                </div>
+
                             </div>
-                            <div style={{ marginTop: 16 }}>
+                            <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
                                 <Switch
                                     checked={showYSlice}
                                     disabled={!obj3d.current.sliceY}
-                                    label="Y slices"
+                                    label="Coronal (Y) slices"
                                     onChange={() => {
                                         if (obj3d.current.sliceY) {
                                             setShowYSlice(!showYSlice);
@@ -728,13 +871,34 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
                                     }}
                                 />
+
+                                <div
+                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                >
+                                    <Button
+                                        disabled={!obj3d.current.volume}
+
+                                        onClick={() => {
+                                            setCameraRotation([0, 0, 1], [0, - rtState.current.camDistance, 0]);
+
+                                        }}
+                                    >P</Button>
+                                    <Button
+                                        disabled={!obj3d.current.volume}
+                                        onClick={() => {
+                                            setCameraRotation([0, 0, 1], [0, rtState.current.camDistance, 0]);
+                                        }}
+                                    >A</Button>
+
+                                </div>
+
                             </div>
-                            <div style={{ marginTop: 16 }}>
+                            <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
 
                                 <Switch
                                     checked={showZSlice}
                                     disabled={!obj3d.current.sliceZ}
-                                    label="Z slices"
+                                    label="Axial (Z) slices"
                                     onChange={() => {
                                         if (obj3d.current.sliceZ) {
                                             setShowZSlice(!showZSlice);
@@ -757,6 +921,25 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
                                     }}
                                 />
+
+                                <div
+                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                >
+                                    <Button
+                                        disabled={!obj3d.current.volume}
+
+                                        onClick={() => {
+                                            setCameraRotation([0, 1, 0], [0, 0, - rtState.current.camDistance]);
+                                        }}
+                                    >I</Button>
+                                    <Button
+                                        disabled={!obj3d.current.volume}
+                                        onClick={() => {
+                                            setCameraRotation([0, 1, 0], [0, 0, rtState.current.camDistance]);
+                                        }}
+                                    >S</Button>
+
+                                </div>
                             </div>
 
                         </div>
@@ -771,10 +954,16 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 icon="confirm"
                                 disabled={!props.volumeFile || (remoteTask && remoteTask.hasStarted())}
                                 onClick={() => {
-                                    const params = { param1: "value1" };
+                                    const params = { rotation: deltaRotation.slice(0, 3) };
                                     const task = RegistrationTask.create(
                                         props.volumeFile?.file,
                                         params,
+                                        (task) => {
+                                            setRemoteTask(task);
+                                            if (!task) {
+                                                setShowLogs(false);
+                                            }
+                                        },
                                         (lines: string[]) => setLoglines(lines),
                                     );
                                     setRemoteTask(task)
@@ -801,7 +990,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 remoteTask
                                     ?
                                     <ProgressBar
-                                        intent={remoteTask.isCanceled() ? Intent.WARNING : Intent.PRIMARY}
+                                        intent={remoteTask.isCanceled() ? Intent.WARNING : (remoteTask.hasStarted() ? Intent.PRIMARY : Intent.NONE)}
                                     />
                                     :
                                     null
