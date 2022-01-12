@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -125,6 +126,30 @@ func getTaskExistingTaskDir(taskId string) string {
 	}
 }
 
+func getTaskExistingStatus(taskFullDir string, defaultStatus string) string {
+	statusPath := path.Join(taskFullDir, "STATUS")
+	if fileExists(statusPath) {
+		//if the file exists, at least the task was created
+		f, err := os.Open(statusPath)
+		if err != nil {
+			//could not read the file for some reason, can not say more than task was created...
+			return "created"
+		}
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+		if scanner.Scan() {
+			//actual status indicated on first line
+			return scanner.Text()
+		} else {
+			//could not read the file for some reason, can not say more than task was created...
+			return "created"
+		}
+	} else {
+		return defaultStatus
+	}
+}
+
 type TaskConfig struct {
 	MovingImage  string `json:"moving_image"`
 	PreTransform string `json:"pre_transform"`
@@ -165,7 +190,7 @@ func TaskFromID(taskId string) Task {
 	if taskFullDir == "" {
 		status = "unknown"
 	} else {
-		status = "created"
+		status = getTaskExistingStatus(taskFullDir, "created")
 	}
 	return Task{
 		id:      TaskId(taskId),
@@ -426,8 +451,7 @@ func (api *TaskApiImpl) getTaskStatus(w http.ResponseWriter, r *http.Request) {
 	if task.status == "unknown" {
 		w.WriteHeader(http.StatusNotFound)
 	} else {
-		//FIXME
-		fmt.Fprintf(w, "{\"taskId\": \"%s\", \"status\":\"%s\"}", taskId, "pending")
+		fmt.Fprintf(w, "{\"taskId\": \"%s\", \"status\":\"%s\"}", taskId, task.status)
 	}
 }
 
