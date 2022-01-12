@@ -665,7 +665,7 @@ func handleRequests() {
 
 	apiRouter.Use(corsHnd)
 
-	log.Fatal(http.ListenAndServe(":"+getListenedPort(), apiRouter))
+	log.Fatal(http.ListenAndServe(":"+getListenedPort(), corsHnd(apiRouter)))
 }
 
 func main() {
