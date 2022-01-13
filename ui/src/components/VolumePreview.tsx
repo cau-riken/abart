@@ -82,7 +82,7 @@ export type Obj3dRefs = {
     brainWire: THREE.Group,
     stats: Stats,
 
-    renderer: THREE.Renderer,
+    renderer: THREE.WebGLRenderer,
 
     renderer2: THREE.Renderer,
     aspect2: number,
@@ -127,6 +127,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [deltaRotation, setDeltaRotation] = React.useState([0, 0, 0]);
 
     const [showWire, setShowWire] = React.useState(true);
+    const [clipWire, setClipWire] = React.useState<string | undefined>();
     const [brainWireInitRotation, setBrainWireInitRotation] = React.useState(new THREE.Quaternion());
     const [fixedWire, setFixedWire] = React.useState(false);
 
@@ -164,6 +165,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         rtState.current.stopQ = new THREE.Quaternion();
 
         setShowWire(true);
+        setClipWire(undefined);
         setBrainWireInitRotation(new THREE.Quaternion());
         setFixedWire(false);
 
@@ -235,7 +237,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                 niftiloadr.load(filename,
                     function onload(volume) {
-                        console.log("volume", volume);
                         if (volume) {
                             obj3d.current.volume = volume;
 
@@ -297,6 +298,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             camera.getWorldQuaternion(rtState.current.stopQ);
 
                             initBrainWire(scene, mriBbox.max.toArray());
+                            setBrainWireFrame(typeof clipWire == 'undefined');
+
 
 
                             const controls = new ArcballControls(camera, renderer.domElement, scene);
@@ -338,7 +341,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                 //---------------------------------------------------------------------
                 // second renderer in an inset to display main view axis orientation 
-                const { insetScene: scene2, insetCamera: camera2 } = setupInset(obj3d.current.aspect2, camera);
+                const { insetScene: scene2, insetCamera: camera2 } = setupInset(obj3d.current.aspect2, obj3d.current.camera);
                 obj3d.current.camera2 = camera2;
                 obj3d.current.scene2 = scene2;
 
@@ -353,7 +356,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         const delta = clock.getDelta();
                         obj3d.current.boxAniMixer.update(delta);
                     }
-                    renderer.render(scene, camera);
+                    renderer.render(obj3d.current.scene, obj3d.current.camera);
 
                     //obj3d.current.stats.update();
                 }
@@ -403,6 +406,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             renderer.setPixelRatio(window.devicePixelRatio);
             volRendCont.appendChild(renderer.domElement);
 
+            renderer.localClippingEnabled = (typeof clipWire != 'undefined');
             obj3d.current.renderer = renderer;
 
             /*
@@ -477,6 +481,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
         const objloader = new OBJLoader();
         const wireColor = new THREE.Color(0xFF88FF)
         //objloader.setMaterials(objmaterial);
+
+        const clipPlanes: THREE.Plane[] = [];
+        const material = new THREE.MeshLambertMaterial({
+            color: wireColor,
+            side: THREE.DoubleSide,
+            clippingPlanes: clipPlanes,
+            clipIntersection: false,
+        });
+
         objloader.load("models/bma_sp2-lh.surf-simpld.obj", function (leftHemisphere) {
 
             //update left-hemisphere to display as wireframe
@@ -486,7 +499,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     child.material.color = wireColor;
                     //child.material.opacity = 0.9;
                     //child.material.transparent = true;
-
+                    child.material.side = THREE.DoubleSide;
+                    child.material.clippingPlanes = clipPlanes;
+                    child.material.clipIntersection = false;
                 }
             });
             //create right-hemisphere by mirroring through sagittal (median) plane
@@ -529,6 +544,65 @@ const VolumePreview = (props: VolumePreviewProps) => {
     };
 
 
+    const setBrainWireFrame = (wireframe: boolean) => {
+        if (obj3d.current.brainWire) {
+            obj3d.current.brainWire.traverse(function (child) {
+                if (child.isMesh) {
+                    child.material.wireframe = wireframe;
+                }
+            });
+        }
+    };
+
+    const refreshClippingPlanes = (clipWire: string | undefined) => {
+
+        if (clipWire) {
+            const planeNorms: THREE.Vector3[] = [];
+            let slice: VolumeSlice;
+            let pos: number = NaN;
+
+            switch (clipWire) {
+                case 'x':
+                    planeNorms.push(new THREE.Vector3(-1, 0, 0));
+                    planeNorms.push(new THREE.Vector3(1, 0, 0));
+                    slice = obj3d.current.sliceX;
+                    pos = slice.mesh.matrix.elements[12];
+                    break;
+                case 'y':
+                    planeNorms.push(new THREE.Vector3(0, -1, 0));
+                    planeNorms.push(new THREE.Vector3(0, 1, 0));
+                    slice = obj3d.current.sliceY;
+                    pos = slice.mesh.matrix.elements[13];
+                    break;
+                case 'z':
+                    planeNorms.push(new THREE.Vector3(0, 0, -1));
+                    planeNorms.push(new THREE.Vector3(0, 0, 1));
+                    slice = obj3d.current.sliceZ;
+                    pos = slice.mesh.matrix.elements[14];
+                    break;
+
+            }
+            if (!isNaN(pos)) {
+
+                const thickness = 1.5;
+                const clipPlanes: THREE.Plane[] = [];
+
+                clipPlanes.push(
+                    new THREE.Plane(planeNorms[0], pos + thickness)
+                );
+                clipPlanes.push(
+                    new THREE.Plane(planeNorms[1], -pos + thickness)
+                );
+
+
+                obj3d.current.brainWire.traverse(function (child) {
+                    if (child.isMesh) {
+                        child.material.clippingPlanes = clipPlanes;
+                    }
+                });
+            }
+        }
+    };
 
     const getRotationOffset = () => {
         //current camera rotation
@@ -571,6 +645,44 @@ const VolumePreview = (props: VolumePreviewProps) => {
         updateBrainWireRotation();
         updateInset();
     };
+
+    //-------------------------------------------------------------------------
+    const setClipWireBySlice = (newClipWire: string, enableClipping: boolean) => {
+        if (enableClipping) {
+            //enabling wireframe clipping
+            setClipWire(newClipWire);
+            setBrainWireFrame(false);
+            refreshClippingPlanes(newClipWire);
+            obj3d.current.renderer.localClippingEnabled = true;
+        } else {
+            //disabling wireframe clipping
+            setClipWire(undefined);
+            setBrainWireFrame(true);
+            obj3d.current.renderer.localClippingEnabled = false;
+        }
+    }
+
+
+    const setShowSlice = (slice: string, newShowSlice: boolean) => {
+        switch (slice) {
+            case 'x':
+                setShowXSlice(newShowSlice);
+                obj3d.current.sliceX.mesh.visible = newShowSlice;
+                break;
+            case 'y':
+                setShowYSlice(newShowSlice);
+                obj3d.current.sliceY.mesh.visible = newShowSlice;
+                break;
+            case 'z':
+                setShowZSlice(newShowSlice);
+                obj3d.current.sliceZ.mesh.visible = newShowSlice;
+                break;
+        }
+        if (!newShowSlice) {
+            setClipWireBySlice(slice, false);
+        }
+    }
+
 
 
     return (
@@ -797,18 +909,28 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
                             <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+                                <div
+                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                >
 
-                                <Switch
-                                    checked={showXSlice}
-                                    disabled={!obj3d.current.sliceX}
-                                    label="Sagittal (X) slices"
-                                    onChange={() => {
-                                        if (obj3d.current.sliceX) {
-                                            setShowXSlice(!showXSlice);
-                                            obj3d.current.sliceX.mesh.visible = !showXSlice
-                                        };
-                                    }}
-                                />
+                                    <Switch
+                                        checked={showXSlice}
+                                        disabled={!obj3d.current.sliceX}
+                                        label="Sagittal (X) slices"
+                                        onChange={() => {
+                                            setShowSlice('x', !showXSlice);
+                                        }}
+                                    />
+
+                                    <Switch
+                                        checked={clipWire == 'x'}
+                                        disabled={!obj3d.current.sliceX || !showXSlice}
+                                        label="clip brainwire"
+                                        onChange={() => {
+                                            setClipWireBySlice('x', clipWire != 'x');
+                                        }}
+                                    />
+                                </div>
                                 <Slider
                                     className="x-slider"
                                     min={0}
@@ -822,6 +944,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         setIndexX(value);
                                         obj3d.current.sliceX.index = value;
                                         obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
+
+                                        refreshClippingPlanes(clipWire);
                                     }}
                                 />
                                 <div
@@ -845,17 +969,29 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                             </div>
                             <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
-                                <Switch
-                                    checked={showYSlice}
-                                    disabled={!obj3d.current.sliceY}
-                                    label="Coronal (Y) slices"
-                                    onChange={() => {
-                                        if (obj3d.current.sliceY) {
-                                            setShowYSlice(!showYSlice);
-                                            obj3d.current.sliceY.mesh.visible = !showYSlice
-                                        };
-                                    }}
-                                />
+                                <div
+                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                >
+
+                                    <Switch
+                                        checked={showYSlice}
+                                        disabled={!obj3d.current.sliceY}
+                                        label="Coronal (Y) slices"
+                                        onChange={() => {
+                                            setShowSlice('y', !showYSlice);
+                                        }}
+                                    />
+
+                                    <Switch
+                                        checked={clipWire == 'y'}
+                                        disabled={!obj3d.current.sliceY || !showYSlice}
+                                        label="clip brainwire"
+                                        onChange={() => {
+                                            setClipWireBySlice('y', clipWire != 'y');
+                                        }}
+                                    />
+                                </div>
+
                                 <Slider
                                     className="y-slider"
                                     min={0}
@@ -869,6 +1005,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         setIndexY(value);
                                         obj3d.current.sliceY.index = value;
                                         obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
+                                        refreshClippingPlanes(clipWire);
                                     }}
                                 />
 
@@ -880,7 +1017,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                                         onClick={() => {
                                             setCameraRotation([0, 0, 1], [0, - rtState.current.camDistance, 0]);
-
                                         }}
                                     >P</Button>
                                     <Button
@@ -894,18 +1030,27 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                             </div>
                             <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+                                <div
+                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                >
 
-                                <Switch
-                                    checked={showZSlice}
-                                    disabled={!obj3d.current.sliceZ}
-                                    label="Axial (Z) slices"
-                                    onChange={() => {
-                                        if (obj3d.current.sliceZ) {
-                                            setShowZSlice(!showZSlice);
-                                            obj3d.current.sliceZ.mesh.visible = !showZSlice
-                                        };
-                                    }}
-                                />
+                                    <Switch
+                                        checked={showZSlice}
+                                        disabled={!obj3d.current.sliceZ}
+                                        label="Axial (Z) slices"
+                                        onChange={() => {
+                                            setShowSlice('z', !showZSlice);
+                                        }}
+                                    />
+                                    <Switch
+                                        checked={clipWire == 'z'}
+                                        disabled={!obj3d.current.sliceZ || !showZSlice}
+                                        label="clip brainwire"
+                                        onChange={() => {
+                                            setClipWireBySlice('z', clipWire != 'z');
+                                        }}
+                                    />
+                                </div>
                                 <Slider
                                     className="z-slider"
                                     min={0}
@@ -919,6 +1064,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         setIndexZ(value);
                                         obj3d.current.sliceZ.index = value;
                                         obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
+
+                                        refreshClippingPlanes(clipWire);
                                     }}
                                 />
 
