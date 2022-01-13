@@ -130,7 +130,7 @@ const UIMain = (props: UIMainProps) => {
                             if (e.target.files.length) {
                                 const selectedFile = e.target.files[0];
 
-                                const loadedFile = loadLocalVolumeFile(selectedFile);
+                                loadLocalVolumeFile(selectedFile);
                                 //console.log("onInputChange selectedFile:", selectedFile);
                             }
                         }

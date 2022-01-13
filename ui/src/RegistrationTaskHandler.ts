@@ -44,10 +44,53 @@ export class RegistrationTask {
         );
     }
 
-    static create(volumeFile: File, taskParams: TaskParams, onDone: (task?: RegistrationTask) => void, loglines: (lines: string[]) => void): RegistrationTask {
+    static create(
+        volumeFile: File, taskParams: TaskParams,
+        onSubmitted: (task?: RegistrationTask) => void,
+        loglines: (lines: string[]) => void,
+        onDone: (iserror: boolean, event: Event) => void,
+    ): RegistrationTask {
 
         const task = new RegistrationTask(taskParams);
-        this.uploadFile(volumeFile, task, onDone, loglines);
+        const uploadProm = this.uploadFile(volumeFile, task);
+
+        uploadProm.then(function (response) {
+            //console.log(response);
+            task.taskId = response.data.taskId;
+
+            setTimeout(() => {
+                const logMsgSocket = new WebSocket(
+                    RegistrationTask.getApiUrlPrefix("ws://") + '/tasks/' + task.taskId + '/logs'
+                );
+                logMsgSocket.onmessage = function (event) {
+                    loglines(event.data.split("\n"))
+                    //console.log(event.data);
+                };
+                logMsgSocket.onclose = function (event) {
+                    console.log("logMsgSocket.onclose", event);
+
+                    //new to check status to know if Task completed succesfully or was canceled
+                    task.refreshStatus()
+                        .then(
+                            () => onDone(!task.hasFinished(), event)
+                        ).catch(
+                            () => onDone(true, event)
+                        );
+
+                };
+                logMsgSocket.onerror = function (event) {
+                    console.log("logMsgSocket.onerror", event);
+                    onDone(true, event);
+                };
+
+            }, 10);
+            onSubmitted(task);
+        })
+            .catch(function (error) {
+                onSubmitted(undefined);
+                console.log(error);
+            });
+
         return task;
     }
 
@@ -64,15 +107,13 @@ export class RegistrationTask {
 
     static uploadFile(
         file: File,
-        task: RegistrationTask,
-        onDone: (task?: RegistrationTask) => void,
-        loglines: (lines: string[]) => void
+        task: RegistrationTask
     ) {
         const formData = new FormData();
         formData.append("inputDataFile", file);
         formData.append("params", JSON.stringify(task.taskParams));
 
-        axios.post<StartTaskResponse>(
+        return axios.post<StartTaskResponse>(
             RegistrationTask.getApiUrlPrefix() + '/tasks',
             formData,
             {
@@ -80,26 +121,7 @@ export class RegistrationTask {
                     'Content-Type': 'multipart/form-data'
                 }
             }
-        )
-            .then(function (response) {
-                console.log(response);
-                task.taskId = response.data.taskId;
-
-                setTimeout(() => {
-                    const exampleSocket = new WebSocket(
-                        RegistrationTask.getApiUrlPrefix("ws://") + '/tasks/' + task.taskId + '/logs'
-                    );
-                    exampleSocket.onmessage = function (event) {
-                        loglines(event.data.split("\n"))
-                        //console.log(event.data);
-                    }
-                }, 10);
-                onDone(task);
-            })
-            .catch(function (error) {
-                onDone(undefined);
-                console.log(error);
-            });
+        );
     }
 
 
@@ -114,6 +136,10 @@ export class RegistrationTask {
 
     hasStarted() {
         return this.taskId != null;
+    };
+
+    hasFinished() {
+        return this.taskStatus.startsWith('done');
     };
 
     isCanceled() {
@@ -134,6 +160,18 @@ export class RegistrationTask {
             });
         this.taskStatus = 'canceling';
         return this;
+    };
+
+    refreshStatus() {
+        return axios.get(
+            RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/status'
+        )
+            .then((response) => {
+                this.taskStatus = response.data.status;
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
     };
 
 }

@@ -109,7 +109,7 @@ const SELECTED_FILE_FAKEURL = "selected_file";
 const VolumePreview = (props: VolumePreviewProps) => {
 
     const [isLoading, setIsLoading] = React.useState(false);
-    const [loadError, setLoadError] = React.useState();
+    const [alertMessage, setAlertMessage] = React.useState<JSX.Element | undefined>();
 
     const volRendererContainer = React.useRef<HTMLDivElement>();
     const sliceXRendererContainer = React.useRef<HTMLDivElement>();
@@ -330,7 +330,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     },
                     function onError(e) {
                         console.error(e);
-                        setLoadError(e);
+                        setAlertMessage(
+                            <p>
+                                Couldn't load the selected file.
+                                <br />
+                                Please check it is a valid NIFTi file.
+                            </p>);
                         setIsLoading(false);
                     },
 
@@ -751,22 +756,18 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         :
                         null
                     }
-                    {loadError
+                    {alertMessage
                         ?
                         <Alert
                             confirmButtonText="Close"
-                            isOpen={loadError}
+                            isOpen={alertMessage}
                             canEscapeKeyCancel={true}
                             canOutsideClickCancel={true}
                             onClose={() => {
-                                setLoadError(undefined);
+                                setAlertMessage(undefined);
                             }}
                         >
-                            <p>
-                                Couldn't load the selected file.
-                                <br />
-                                Please check it is a valid NIFTi file.
-                            </p>
+                            {alertMessage}
                         </Alert>
                         :
                         null}
@@ -865,9 +866,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         </div>
 
                         <div
-                            style={{ 
+                            style={{
                                 marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
-                                display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
+                                display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline"
+                            }}
                         >
 
                             <span>Volume orientation :</span>
@@ -884,21 +886,22 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         </div>
 
                         <div
-                            style={{ 
-                                
-                            display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
+                            style={{
+
+                                display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline"
+                            }}
                         >
 
                             <span>Orientation difference:</span>
 
-                                <>
-                                    <span
-                                    >{THREE.MathUtils.radToDeg(deltaRotation[0]).toFixed(2) + '°'}</span>
-                                    <span
-                                    >{THREE.MathUtils.radToDeg(deltaRotation[1]).toFixed(2) + '°'}</span>
-                                    <span
-                                    >{THREE.MathUtils.radToDeg(deltaRotation[2]).toFixed(2) + '°'}</span>
-                                </>
+                            <>
+                                <span
+                                >{THREE.MathUtils.radToDeg(deltaRotation[0]).toFixed(2) + '°'}</span>
+                                <span
+                                >{THREE.MathUtils.radToDeg(deltaRotation[1]).toFixed(2) + '°'}</span>
+                                <span
+                                >{THREE.MathUtils.radToDeg(deltaRotation[2]).toFixed(2) + '°'}</span>
+                            </>
                             <span></span>
                         </div>
 
@@ -1112,16 +1115,33 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                             }
                                         },
                                         (lines: string[]) => setLoglines(lines),
+                                        (iserror, event) => {
+                                            if (iserror) {
+                                                setAlertMessage(
+                                                    <p>
+                                                        Registration aborted!
+                                                    </p>);
+                                                task.taskStatus = 'aborted';
+                                            } else {
+                                                setAlertMessage(
+                                                    <p>
+                                                        Registration done!
+                                                    </p>);
+                                                task.taskStatus = 'done';
+                                            }
+                                            setShowLogs(false);
+                                        },
+
                                     );
                                     setRemoteTask(task)
                                     setShowLogs(true);
-                                }} >register</Button>
+                                }} >Register</Button>
 
                             <br />
 
                             <Button
                                 icon="delete"
-                                disabled={!remoteTask || !remoteTask.hasStarted()}
+                                disabled={!remoteTask || !remoteTask.hasStarted() || remoteTask.hasFinished()}
                                 onClick={() => {
                                     const updatedTask = remoteTask?.cancel(
                                         () => {
@@ -1129,12 +1149,13 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                             setShowLogs(false);
                                         });
                                     setRemoteTask(updatedTask);
+                                }} >Cancel</Button>
                                 }} >cancel</Button>
 
                         </div>
                         <div style={{ height: 10, margin: "4px 6px", padding: "0 10px" }}>
                             {
-                                remoteTask
+                                remoteTask && !remoteTask.hasFinished()
                                     ?
                                     <ProgressBar
                                         intent={remoteTask.isCanceled() ? Intent.WARNING : (remoteTask.hasStarted() ? Intent.PRIMARY : Intent.NONE)}
