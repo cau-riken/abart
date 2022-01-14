@@ -112,7 +112,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [alertMessage, setAlertMessage] = React.useState<JSX.Element | undefined>();
 
     const volRendererContainer = React.useRef<HTMLDivElement>();
-    const sliceXRendererContainer = React.useRef<HTMLDivElement>();
+    const clock = React.useRef(new THREE.Clock());
 
     const [target, setTarget] = React.useState<HTMLDivElement>();
     const rendererContSize = useSize(target);
@@ -151,6 +151,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             deltaRotation,
             brainWireInitRotation,
         };
+        renderAll();
     });
 
 
@@ -313,6 +314,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 obj3d.current.boxAninAction.stop();
                                 obj3d.current.boxAninAction.play();
 
+                                renderAll();
+
                             });
                             obj3d.current.controls = controls;
 
@@ -351,22 +354,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.scene2 = scene2;
 
                 //---------------------------------------------------------------------
-                const clock = new THREE.Clock();
-                const animate = function () {
-
-                    requestAnimationFrame(animate);
-
-                    updateInset();
-                    if (obj3d.current.boxAniMixer) {
-                        const delta = clock.getDelta();
-                        obj3d.current.boxAniMixer.update(delta);
-                    }
-                    renderer.render(obj3d.current.scene, obj3d.current.camera);
-
-                    //obj3d.current.stats.update();
-                }
-
-                animate();
             }
         }
 
@@ -478,6 +465,27 @@ const VolumePreview = (props: VolumePreviewProps) => {
             obj3d.current.renderer2.render(obj3d.current.scene2, obj3d.current.camera2);
         }
     }
+
+    const renderAll = function () {
+        if (obj3d.current.camera) {
+
+            updateInset();
+            if (obj3d.current.boxAniMixer) {
+                const delta = clock.current.getDelta();
+                obj3d.current.boxAniMixer.update(delta);
+                //as long as animation isn't finished...
+                if (obj3d.current.boxAninAction.isRunning()) {
+                    //reiterate another rendering
+                    //(don't need 60FPS for this animation!)
+                    setTimeout(renderAll, 40);
+                }
+            }
+            obj3d.current.renderer.render(obj3d.current.scene, obj3d.current.camera);
+
+            //obj3d.current.stats.update();
+        }
+    }
+
 
     const initBrainWire = (scene: THREE.Scene, bboxMax: number[]) => {
 
