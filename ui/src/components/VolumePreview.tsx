@@ -13,12 +13,15 @@ import { NIfTILoader } from '../loaders/NIfTILoader';
 import {
     Alert,
     Button,
+    Icon,
     Intent,
+    NumberRange,
     ProgressBar,
     Slider,
     Spinner,
     SpinnerSize,
-    Switch
+    Switch,
+    RangeSlider,
 } from "@blueprintjs/core";
 
 import useResizeObserver from '@react-hook/resize-observer'
@@ -134,6 +137,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [showXSlice, setShowXSlice] = React.useState(false);
     const [showYSlice, setShowYSlice] = React.useState(false);
     const [showZSlice, setShowZSlice] = React.useState(true);
+    const [volumeRange, setVolumeRange] = React.useState<[number, number]>([0,0]);
 
     const [indexX, setIndexX] = React.useState(0);
     const [indexY, setIndexY] = React.useState(0);
@@ -271,7 +275,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             sliceZ.mesh.visible = showZSlice;
                             scene.add(sliceZ.mesh);
                             obj3d.current.sliceZ = sliceZ;
-                            setIndexZ(obj3d.current.sliceZ.index)
+                            setIndexZ(obj3d.current.sliceZ.index);
 
                             //y plane
                             const initSliceY = Math.floor(volume.dimensions[1] / 2);
@@ -280,7 +284,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             sliceY.mesh.visible = showYSlice;
                             scene.add(sliceY.mesh);
                             obj3d.current.sliceY = sliceY;
-                            setIndexY(obj3d.current.sliceY.index)
+                            setIndexY(obj3d.current.sliceY.index);
 
                             //x plane
                             const initSliceX = Math.floor(volume.dimensions[0] / 2);
@@ -288,8 +292,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             sliceX.mesh.visible = showXSlice;
                             scene.add(sliceX.mesh);
                             obj3d.current.sliceX = sliceX;
-                            setIndexX(obj3d.current.sliceX.index)
+                            setIndexX(obj3d.current.sliceX.index);
 
+                            setVolumeRange([
+                                obj3d.current.volume.windowLow,
+                                obj3d.current.volume.windowHigh
+                            ]);
 
                             const mriBbox = new THREE.Box3().setFromObject(cube);
                             const mboxZLen = mriBbox.max.toArray()[2];
@@ -1101,6 +1109,35 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             </div>
 
                         </div>
+
+                        <div 
+                        style={{ 
+                            marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
+                            display: 'grid',
+                            gridTemplateColumns: '30px 1fr',
+                        }}>
+                            <Icon 
+                                style={
+                                    (!obj3d.current.volume ? {color: 'rgba(92, 112, 128, 0.2)'} : {})
+                                   }
+                                icon="contrast"
+                            />
+                            <RangeSlider
+                                disabled={!obj3d.current.volume}
+                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
+                                max={obj3d.current.volume ? obj3d.current.volume.max : 100}
+                                stepSize={2}
+                                labelStepSize={obj3d.current.volume ? obj3d.current.volume.max : 20}
+                                onChange={(range: NumberRange) => {
+                                    obj3d.current.volume.windowLow = range[0];
+                                    obj3d.current.volume.windowHigh = range[1];
+                                    obj3d.current.volume.repaintAllSlices();
+                                    setVolumeRange(range);
+                                }}
+                                value={volumeRange}
+                            />
+                        </div>
+
                     </div>
                     <div>
                         <div

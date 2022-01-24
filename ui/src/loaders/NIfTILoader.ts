@@ -109,7 +109,7 @@ class NIfTILoader extends Loader {
 
 		if (Nifti.isNIFTI(data)) {
 			const niftiHeader = Nifti.readHeader(data);
-			console.log(niftiHeader);
+			//console.log(niftiHeader);
 			console.log(niftiHeader.toFormattedString());
 
 			const niftiImage = Nifti.readImage(niftiHeader, data);
@@ -136,6 +136,8 @@ class NIfTILoader extends Loader {
 				const min_max = volume.computeMinMax();
 				const min = min_max[0];
 				const max = min_max[1];
+				volume.min = min;
+				volume.max = max;				
 				// attach the scalar range to the volume
 				volume.windowLow = min;
 				volume.windowHigh = max;
