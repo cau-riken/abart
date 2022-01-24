@@ -111,6 +111,39 @@ func dirExists(path string) bool {
 	}
 }
 
+type TaskParams struct {
+	Rotation []float64 `json:"rotation"`
+}
+
+func makeTransformMatrix(paramsJson string, matrixFilePath string) bool {
+	var p TaskParams
+	err := json.Unmarshal([]byte(paramsJson), &p)
+	if err != nil {
+		fmt.Println("error while retrieving rotation params:", err)
+		return false
+
+	} else if len(p.Rotation) != 3 {
+		fmt.Println("invalid provided rotation params: %v", p)
+		return false
+
+	} else {
+
+		transform := fmt.Sprintf(
+			"Transform: Euler3DTransform_double_3_3\nParameters:  %f %f %f  0 0 0FixedParameters: 0 0 0 0\n",
+			p.Rotation[0], p.Rotation[1], p.Rotation[2],
+		)
+		err := os.WriteFile(matrixFilePath, []byte(transform), 0644)
+
+		if err != nil {
+			//could not create file
+			fmt.Println("error while create pre-transform matrix:", err)
+			return false
+		}
+
+		return true
+	}
+}
+
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func getTaskDir(taskId string) string {
@@ -205,11 +238,7 @@ func (t *Task) getWorkerContainerName() string {
 
 func (t *Task) prepare() {
 
-	config := TaskConfig{
-		MovingImage: t.inputFile,
-	}
-
-	jsonData, err := json.Marshal(config)
+	jsonData, err := json.Marshal(t.config)
 	if err != nil {
 		t.status = "failed"
 		t.lastMessage = "Error generating config file"
@@ -402,6 +431,7 @@ func (api *TaskApiImpl) createTask(w http.ResponseWriter, r *http.Request) {
 	// write this byte array to file
 	tempFile.Write(fileBytes)
 	task.inputFile = fullFilePath
+	task.config.MovingImage = fullFilePath
 
 	//retreive task parameters sent along with the file
 	paramsJson := r.PostFormValue("params")
@@ -410,9 +440,13 @@ func (api *TaskApiImpl) createTask(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 		return
 	}
-	defer file.Close()
+
 	fmt.Printf("Parameters : %+v\n", paramsJson)
 	task.params = paramsJson
+	matrixFilePath := "initialTransform.tfm"
+	if makeTransformMatrix(paramsJson, path.Join(task.workdir, matrixFilePath)) {
+		task.config.PreTransform = "../" + matrixFilePath
+	}
 
 	//rest of the process can be defered after the response is sent
 	api.th.StartTask(task)
@@ -549,7 +583,7 @@ func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
 				//wait until task change status (either becomes running or canceled)
 				for t.status == "prepared" {
 					sendMessage(conn, "waiting...\n")
-					time.Sleep(5 * time.Second)
+					time.Sleep(2 * time.Second)
 				}
 				sendMessage(conn, "Task is now "+t.status+"\n")
 			}
@@ -666,8 +700,6 @@ func handleRequests() {
 			http.MethodDelete,
 		}),
 
-		//FIXME
-		//handlers.AllowedOrigins([]string{"*"}),
 		//during debug, direct access of the API
 		handlers.AllowedOrigins([]string{"http://localhost:9000", "http://localhost:9090"}),
 
