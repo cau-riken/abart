@@ -1,5 +1,5 @@
 # temporary image used as build environment
-FROM node:14.18.0-alpine as build
+FROM node:16.13.2-alpine as build
 
 
 WORKDIR /app
