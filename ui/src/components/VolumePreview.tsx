@@ -1102,8 +1102,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                         <div
                             style={{
-                        style={{ 
-                            style={{
                                 marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
                                 display: 'grid',
                                 gridTemplateColumns: '30px 1fr',
