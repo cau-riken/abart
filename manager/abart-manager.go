@@ -129,7 +129,7 @@ func makeTransformMatrix(paramsJson string, matrixFilePath string) bool {
 	} else {
 
 		transform := fmt.Sprintf(
-			"Transform: Euler3DTransform_double_3_3\nParameters:  %f %f %f  0 0 0FixedParameters: 0 0 0 0\n",
+			"Transform: Euler3DTransform_double_3_3\nParameters:  %f %f %f  0 0 0 FixedParameters: 0 0 0 0\n",
 			p.Rotation[0], p.Rotation[1], p.Rotation[2],
 		)
 		err := os.WriteFile(matrixFilePath, []byte(transform), 0644)
