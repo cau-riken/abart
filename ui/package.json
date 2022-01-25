@@ -42,7 +42,6 @@
     "@blueprintjs/core": "^3.52.0",
     "@blueprintjs/popover2": "^0.12.9",
     "@react-hook/debounce": "^4.0.0",
-    "@react-hook/resize-observer": "^1.2.5",
     "axios": "^0.25.0",
     "fflate": "^0.7.3",
     "nifti-reader-js": "^0.5.4",

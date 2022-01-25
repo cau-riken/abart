@@ -22,9 +22,12 @@ import {
     SpinnerSize,
     Switch,
     RangeSlider,
+    ResizeEntry,
 } from "@blueprintjs/core";
 
-import useResizeObserver from '@react-hook/resize-observer'
+import {
+    ResizeSensor2,
+} from "@blueprintjs/popover2";
 
 import { RegistrationTask } from "../RegistrationTaskHandler";
 import SinkLogger from "./SinkLogger";
@@ -59,18 +62,6 @@ const setupInset = (insetAspect: number, camera: THREE.Camera) => {
 
     return { insetScene, insetCamera };
 }
-
-function useSize(target: HTMLDivElement) {
-    const [size, setSize] = React.useState<DOMRect>();
-
-    React.useLayoutEffect(() => {
-        target && setSize(target.getBoundingClientRect());
-    }, [target]);
-
-    useResizeObserver(target, (entry) => setSize(entry.contentRect));
-    return size;
-}
-
 
 export type RealTimeState = {
     fixedWire: boolean,
@@ -117,10 +108,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const volRendererContainer = React.useRef<HTMLDivElement>();
     const clock = React.useRef(new THREE.Clock());
 
-    const [target, setTarget] = React.useState<HTMLDivElement>();
-    const rendererContSize = useSize(target);
-
-
     const objectURLs = React.useRef<string[]>([]);
 
     const volRendererInset = React.useRef<HTMLDivElement>();
@@ -137,7 +124,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [showXSlice, setShowXSlice] = React.useState(false);
     const [showYSlice, setShowYSlice] = React.useState(false);
     const [showZSlice, setShowZSlice] = React.useState(true);
-    const [volumeRange, setVolumeRange] = React.useState<[number, number]>([0,0]);
+    const [volumeRange, setVolumeRange] = React.useState<[number, number]>([0, 0]);
 
     const [indexX, setIndexX] = React.useState(0);
     const [indexY, setIndexY] = React.useState(0);
@@ -174,6 +161,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         setBrainWireInitRotation(new THREE.Quaternion());
         setFixedWire(false);
 
+        setVolumeRange([0, 0]);
         setShowXSlice(false);
         setShowYSlice(false);
         setShowZSlice(true);
@@ -371,25 +359,21 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
     //handle resize
-    React.useEffect(() => {
+    const handleResize = (entries: ResizeEntry[]) => {
         if (obj3d.current.renderer) {
             const renderer = obj3d.current.renderer;
             const volRendCont = volRendererContainer.current;
             if (volRendCont) {
                 const aspect = volRendCont.offsetWidth / volRendCont.offsetHeight;
                 renderer.setSize(volRendCont.offsetWidth, volRendCont.offsetHeight);
-                //FIXME why doesn't it catch height downsizing events?
 
-                //console.debug('resize', volRendCont.offsetWidth, volRendCont.offsetHeight, volRendCont.clientWidth, volRendCont.clientHeight) 
                 if (obj3d.current.camera) {
                     obj3d.current.camera.aspect = aspect;
                     obj3d.current.camera.updateProjectionMatrix();
-                    //obj3d.current.controls.handleResize();
                 }
             }
         }
-    }, [rendererContSize]
-    );
+    };
 
 
     //after component is mounted
@@ -745,76 +729,81 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     overflow: 'hidden',
                 }}
             >
-                <div
-                    style={{
-                        width: '100%', height: '100%', position: 'relative',
-                    }}
-                    ref={setTarget}
+                <ResizeSensor2
+                    onResize={handleResize}
                 >
-                    {isLoading
-                        ?
+                    <div
+                        style={{
+                            width: '100%', height: '100%', position: 'relative',
+                        }}
+                    >
+                        {isLoading
+                            ?
+                            <div
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    backgroundColor: 'transparent',
+                                    border: 'none',
+                                    margin: 'auto',
+                                    padding: 0,
+                                    position: 'absolute',
+                                    zIndex: 200,
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <Spinner size={SpinnerSize.LARGE} />
+                            </div>
+                            :
+                            null
+                        }
+                        {alertMessage
+                            ?
+                            <Alert
+                                confirmButtonText="Close"
+                                isOpen={alertMessage}
+                                canEscapeKeyCancel={true}
+                                canOutsideClickCancel={true}
+                                onClose={() => {
+                                    setAlertMessage(undefined);
+                                }}
+                            >
+                                {alertMessage}
+                            </Alert>
+                            :
+                            null}
                         <div
+                            className="volRendererCont"
                             style={{
-                                width: '100%',
-                                height: '100%',
-                                backgroundColor: 'transparent',
+                                position: 'absolute',
+                                width: '100%', height: '100%',
+                            }}
+
+                            ref={volRendererContainer}
+                        >
+                        </div>
+                        <div
+                            ref={volRendererInset}
+                            style={{
+                                width: 100,
+                                height: 100,
+                                backgroundColor: 'transparent', /* or transparent; will show through only if renderer alpha: true */
                                 border: 'none',
-                                margin: 'auto',
+                                margin: 0,
                                 padding: 0,
                                 position: 'absolute',
-                                zIndex: 200,
-                                display: 'flex',
-                                justifyContent: 'center',
+                                left: 10,
+                                bottom: 10,
+                                zIndex: 100,
                             }}
                         >
-                            <Spinner size={SpinnerSize.LARGE} />
                         </div>
-                        :
-                        null
-                    }
-                    {alertMessage
-                        ?
-                        <Alert
-                            confirmButtonText="Close"
-                            isOpen={alertMessage}
-                            canEscapeKeyCancel={true}
-                            canOutsideClickCancel={true}
-                            onClose={() => {
-                                setAlertMessage(undefined);
-                            }}
-                        >
-                            {alertMessage}
-                        </Alert>
-                        :
-                        null}
-                    <div
-                        className="volRendererCont"
-                        style={{
-                            width: '100%', height: '100%',
-                        }}
 
-                        ref={volRendererContainer}
-                    >
+
                     </div>
-                    <div
-                        ref={volRendererInset}
-                        style={{
-                            width: 100,
-                            height: 100,
-                            backgroundColor: 'transparent', /* or transparent; will show through only if renderer alpha: true */
-                            border: 'none',
-                            margin: 0,
-                            padding: 0,
-                            position: 'absolute',
-                            left: 10,
-                            bottom: 10,
-                            zIndex: 100,
-                        }}
-                    >
-                    </div>
+                </ResizeSensor2>
 
-
-                </div>
                 <div
                     style={{
                         backgroundColor: "#EEE",
@@ -1110,16 +1099,18 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                         </div>
 
-                        <div 
+                        <div
+                            style={{
                         style={{ 
-                            marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
-                            display: 'grid',
-                            gridTemplateColumns: '30px 1fr',
-                        }}>
-                            <Icon 
+                            style={{
+                                marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
+                                display: 'grid',
+                                gridTemplateColumns: '30px 1fr',
+                            }}>
+                            <Icon
                                 style={
-                                    (!obj3d.current.volume ? {color: 'rgba(92, 112, 128, 0.2)'} : {})
-                                   }
+                                    (!obj3d.current.volume ? { color: 'rgba(92, 112, 128, 0.2)' } : {})
+                                }
                                 icon="contrast"
                             />
                             <RangeSlider
