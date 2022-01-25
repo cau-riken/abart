@@ -17,4 +17,8 @@ else
 	echo "ANTs transformation completed successfully"
 fi
 echo $ret > finished
+
+#archiving results
+zip -r -Z store registered.zip register/
+
 exit $ret

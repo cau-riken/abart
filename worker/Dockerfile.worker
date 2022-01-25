@@ -10,7 +10,7 @@ COPY ./main_fordocker.sh  /abart/
 RUN chmod a+x /abart/main_fordocker.sh /abart/do_registration.sh ;
 
 RUN apt-get update \
-    && apt-get install -y jq
+    && apt-get install -y jq zip 
 
 ENV ANTSPATH="/opt/ants/bin" \
     PATH="/opt/ants/bin:$PATH" \

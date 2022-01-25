@@ -119,12 +119,11 @@ class NIfTILoader extends Loader {
 			}
 			*/
 
-			console.debug('Affine', niftiHeader.affine);
-
-			console.debug("Units Code = " + niftiHeader.xyzt_units
-				+ " (" + niftiHeader.getUnitsCodeString(Nifti.NIFTI1.SPATIAL_UNITS_MASK & niftiHeader.xyzt_units)
-				+ ", " + niftiHeader.getUnitsCodeString(Nifti.NIFTI1.TEMPORAL_UNITS_MASK & niftiHeader.xyzt_units) + ")\n");
-
+			/*
+						console.debug("Units Code = " + niftiHeader.xyzt_units
+							+ " (" + niftiHeader.getUnitsCodeString(Nifti.NIFTI1.SPATIAL_UNITS_MASK & niftiHeader.xyzt_units)
+							+ ", " + niftiHeader.getUnitsCodeString(Nifti.NIFTI1.TEMPORAL_UNITS_MASK & niftiHeader.xyzt_units) + ")\n");
+			*/
 
 			volume = new Volume();
 
@@ -184,7 +183,7 @@ class NIfTILoader extends Loader {
 						0, Math.sign(j), 0, 0,
 						0, 0, Math.sign(k), 0,
 						0, 0, 0, 1);
-						
+
 				}
 
 				volume.inverseMatrix = volume.matrix.clone().invert();

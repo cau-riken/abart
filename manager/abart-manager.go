@@ -501,7 +501,7 @@ func (api *TaskApiImpl) downloadResult(w http.ResponseWriter, r *http.Request) {
 	} else {
 
 		//file to be downloaded
-		Filename := "result.zip"
+		Filename := "registered.zip"
 		Openfile, err := os.Open(path.Join(task.workdir, Filename))
 		//Close after function return
 		defer Openfile.Close()

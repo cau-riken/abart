@@ -174,4 +174,8 @@ export class RegistrationTask {
             });
     };
 
+    getDownloadResultUrl() {
+        return RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/result';
+    };
+
 }

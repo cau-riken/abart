@@ -12,6 +12,7 @@ import { NIfTILoader } from '../loaders/NIfTILoader';
 
 import {
     Alert,
+    AnchorButton,
     Button,
     Icon,
     Intent,
@@ -1186,7 +1187,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         });
                                     setRemoteTask(updatedTask);
                                 }} >Cancel</Button>
-                                }} >cancel</Button>
+                            <AnchorButton
+                                icon="archive"
+                                disabled={!remoteTask || !remoteTask.hasFinished()}
+                                href={remoteTask ? remoteTask?.getDownloadResultUrl() : ""}
+                                target="_blank"
+                            >Download</AnchorButton>
 
                         </div>
                         <div style={{ height: 10, margin: "4px 6px", padding: "0 10px" }}>
