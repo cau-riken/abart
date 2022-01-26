@@ -29,6 +29,6 @@ jobs:
           context: ./ui
           file: ./ui/Dockerfile.ui
           push: true
-          tags: rikencau/abart-ui:latest, rikencau/abart-ui:$(date +%s)
+          tags: rikencau/abart-ui:latest
 
 
