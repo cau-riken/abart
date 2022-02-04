@@ -36,8 +36,9 @@ import SinkLogger from "./SinkLogger";
 import "./VolumePreview.scss";
 
 import { setupAxesHelper } from './Utils';
-import { Volume } from "three/examples/jsm/misc/Volume";
-import { VolumeSlice } from "three/examples/jsm/misc/VolumeSlice";
+
+import { Volume } from "../misc/Volume";
+import { VolumeSlice } from "../misc/VolumeSlice";
 
 export type LoadedVolumeFile = {
     file: File | undefined,
@@ -96,6 +97,8 @@ export type Obj3dRefs = {
 
     boxAniMixer: THREE.AnimationMixer,
     boxAninAction: THREE.AnimationAction,
+
+    disposable: [],
 };
 
 
@@ -113,7 +116,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const volRendererInset = React.useRef<HTMLDivElement>();
 
-    const obj3d = React.useRef<Obj3dRefs>({});
+    const obj3d = React.useRef<Obj3dRefs>({ disposable: [] });
 
     const [deltaRotation, setDeltaRotation] = React.useState([0, 0, 0]);
 
@@ -154,6 +157,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
     //when Volume changed (as a result of local file selection) 
     React.useEffect(() => {
 
+        clearBeforeVolumeChange();
+
         setDeltaRotation([0, 0, 0]);
         rtState.current.stopQ = new THREE.Quaternion();
 
@@ -184,6 +189,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 stats: obj3d.current.stats,
                 renderer2: obj3d.current.renderer2,
                 aspect2: obj3d.current.aspect2,
+                disposable: [],
             };
 
 
@@ -422,10 +428,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         //dispose renderers
         return () => {
-            if (obj3d.current.volume) {
-                //explicitely release slices to prevent leak (since the hold a back reference to the volume)
-                obj3d.current.volume.sliceList.length = 0;
-            }
+            clearBeforeVolumeChange();
             if (obj3d.current.renderer) {
                 const volRendCont = volRendererContainer.current;
                 if (volRendCont) {
@@ -446,6 +449,22 @@ const VolumePreview = (props: VolumePreviewProps) => {
         }
 
     }, []);
+
+    const clearBeforeVolumeChange = () => {
+        if (obj3d.current.volume) {
+            //explicitely release slices to prevent leak (since the hold a back reference to the volume)
+            obj3d.current.volume.sliceList.length = 0;
+        }
+        obj3d.current.volume = undefined;
+
+        obj3d.current.sliceX?.dispose();
+        obj3d.current.sliceY?.dispose();
+        obj3d.current.sliceZ?.dispose();
+        obj3d.current.controls?.dispose();
+
+        obj3d.current.disposable.forEach(d => d.dispose());
+    };
+
 
     const updateInset = () => {
         if (obj3d.current.controls) {
