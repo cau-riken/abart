@@ -5,6 +5,7 @@ import * as THREE from 'three';
 
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
+import { VolumeRenderShader1 } from 'three/examples/jsm/shaders/VolumeShader.js';
 import { ArcballControls } from 'three/examples/jsm/controls/ArcballControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
@@ -12,6 +13,7 @@ import { NIfTILoader } from '../loaders/NIfTILoader';
 
 import {
     Alert,
+    Alignment,
     AnchorButton,
     Button,
     Icon,
@@ -22,6 +24,8 @@ import {
     Spinner,
     SpinnerSize,
     Switch,
+    Tab,
+    Tabs,
     RangeSlider,
     ResizeEntry,
 } from "@blueprintjs/core";
@@ -90,6 +94,9 @@ export type Obj3dRefs = {
     scene2: THREE.Scene,
     controls: ArcballControls,
 
+    vol3D: THREE.Mesh,
+    materialVol3D: THREE.ShaderMaterial,
+
     volume: Volume,
     sliceX: VolumeSlice,
     sliceY: VolumeSlice,
@@ -120,10 +127,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const [deltaRotation, setDeltaRotation] = React.useState([0, 0, 0]);
 
-    const [showWire, setShowWire] = React.useState(true);
+    const [showWire, setShowWire] = React.useState(false);
     const [clipWire, setClipWire] = React.useState<string | undefined>();
     const [brainWireInitRotation, setBrainWireInitRotation] = React.useState(new THREE.Quaternion());
     const [fixedWire, setFixedWire] = React.useState(false);
+
+    const [showVol3D, setShowVol3D] = React.useState(true);
+    const [isothreshold, setIsothreshold] = React.useState(0.5);
+    const [clims, setClims] = React.useState([0, 1]);
+    const [castIso, setCastIso] = React.useState(true);
 
     const [showXSlice, setShowXSlice] = React.useState(false);
     const [showYSlice, setShowYSlice] = React.useState(false);
@@ -162,11 +174,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
         setDeltaRotation([0, 0, 0]);
         rtState.current.stopQ = new THREE.Quaternion();
 
-        setShowWire(true);
+        setShowWire(false);
         setClipWire(undefined);
         setBrainWireInitRotation(new THREE.Quaternion());
         setFixedWire(false);
 
+        setShowVol3D(true);
         setVolumeRange([0, 0]);
         setShowXSlice(false);
         setShowYSlice(false);
@@ -212,7 +225,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 const volRendCont = volRendererContainer.current;
                 const aspect = volRendCont.offsetWidth / volRendCont.offsetHeight;
 
-                const camera = new THREE.PerspectiveCamera(60, aspect, 0.01, 1e10);
+                const h = 512; // frustum height
+                const camera = new THREE.OrthographicCamera(- h * aspect / 2, h * aspect / 2, h / 2, - h / 2, 1, 1000);
 
                 obj3d.current.camera = camera;
 
@@ -225,10 +239,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
                 scene.add(hemiLight);
 
-                const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-                dirLight.position.set(200, 200, 200);
-                scene.add(dirLight);
-
+                // Colormap textures
+                const cmtextures = {
+                    viridis: new THREE.TextureLoader().load('resources/cm_viridis.png'),
+                    gray: new THREE.TextureLoader().load('resources/cm_gray.png')
+                };
 
                 const niftiloadr = new NIfTILoader(manager);
 
@@ -239,6 +254,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     function onload(volume) {
                         if (volume) {
                             obj3d.current.volume = volume;
+
+                            initVol3D(scene, volume, true);
 
                             //box helper to see the extend of the volume
                             const geometry = new THREE.BoxGeometry(volume.xLength, volume.yLength, volume.zLength);
@@ -301,7 +318,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             rtState.current.camDistance = camDistance;
                             camera.getWorldQuaternion(rtState.current.stopQ);
 
-                            initBrainWire(scene, mriBbox.max.toArray());
+                            initBrainWire(scene, mriBbox.max.toArray(), false);
                             setBrainWireFrame(typeof clipWire == 'undefined');
 
 
@@ -314,8 +331,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 updateBrainWireRotation();
 
                                 //show Volume's bounding-box while rotating
+                                //FIXME animation slows down volumeshader
+                                /*
                                 obj3d.current.boxAninAction.stop();
                                 obj3d.current.boxAninAction.play();
+                                */
 
                                 renderAll();
 
@@ -329,6 +349,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         }
 
                         revokeObjectURLs();
+                        setDisplayVol3DOrSlice(true);
                         setIsLoading(false);
                     },
                     function onProgress(request: ProgressEvent) {
@@ -494,12 +515,90 @@ const VolumePreview = (props: VolumePreviewProps) => {
             }
             obj3d.current.renderer.render(obj3d.current.scene, obj3d.current.camera);
 
-            //obj3d.current.stats.update();
+            obj3d.current.stats?.update();
         }
     }
 
+    //-------------------------------------------------------------------------
+    const initVol3D = (scene: THREE.Scene, volume: Volume, initVisibility: boolean) => {
+        // Colormap texture
+        const cm_viridis = new THREE.TextureLoader().load('resources/cm_viridis.png');
 
-    const initBrainWire = (scene: THREE.Scene, bboxMax: number[]) => {
+        const texture = new THREE.DataTexture3D(volume.data, volume.xLength, volume.yLength, volume.zLength);
+        texture.format = THREE.RedFormat;
+
+        texture.type = THREE.FloatType;
+        texture.minFilter = texture.magFilter = THREE.LinearFilter;
+        texture.unpackAlignment = 1;
+        texture.needsUpdate = true;
+
+        const shader = VolumeRenderShader1;
+
+        const uniforms = THREE.UniformsUtils.clone(shader.uniforms);
+
+        uniforms['u_data'].value = texture;
+        uniforms['u_size'].value.set(volume.xLength, volume.yLength, volume.zLength);
+        //FIXME magic values
+        const valSpan = volume.max - volume.min;
+        uniforms['u_clim'].value.set(volume.min + valSpan * .2, volume.min + valSpan * .5);
+        setClims([volume.min + valSpan * .2, volume.min + valSpan * .5]);
+        uniforms['u_renderstyle'].value = castIso ? 1 : 0; // 0: MIP, 1: ISO
+        uniforms['u_renderthreshold'].value = volume.min + valSpan * .15; // For ISO renderstyle
+        setIsothreshold(volume.min + valSpan * .15);
+        uniforms['u_cmdata'].value = cm_viridis;
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: shader.vertexShader,
+            fragmentShader: shader.fragmentShader,
+            side: THREE.BackSide // The volume shader uses the backface as its "reference point"
+        });
+
+        const geometry = new THREE.BoxGeometry(volume.xLength, volume.yLength, volume.zLength);
+        //locally center at middle of volume
+        geometry.translate(volume.xLength / 2 - 0.5, volume.yLength / 2 - 0.5, volume.zLength / 2 - 0.5);
+
+        const mesh = new THREE.Mesh(geometry, material);
+        //center back on the origin
+        mesh.translateZ(-volume.zLength / 2 + 0.5);
+        mesh.translateY(-volume.yLength / 2 + 0.5);
+        mesh.translateX(-volume.xLength / 2 + 0.5);
+        //re-orient
+        mesh.applyMatrix4(volume.matrix);
+
+        mesh.visible = initVisibility;
+        scene.add(mesh);
+
+        //const box = new THREE.BoxHelper(mesh, 0xff0000);
+        //scene.add(box);
+
+        obj3d.current.vol3D = mesh;
+        obj3d.current.materialVol3D = material;
+
+        obj3d.current.disposable.push(geometry, material, texture, cm_viridis);
+    }
+
+    const setDisplayVol3DOrSlice = (showVol3D: boolean) => {
+        if (obj3d.current.vol3D) {
+
+            if (showVol3D) {
+                obj3d.current.vol3D.visible = showVol3D;
+
+                obj3d.current.sliceX.mesh.visible = false;
+                obj3d.current.sliceY.mesh.visible = false;
+                obj3d.current.sliceZ.mesh.visible = false;
+            } else {
+                obj3d.current.vol3D.visible = showVol3D;
+
+                obj3d.current.sliceX.mesh.visible = showXSlice;
+                obj3d.current.sliceY.mesh.visible = showYSlice;
+                obj3d.current.sliceZ.mesh.visible = showZSlice;
+            }
+        }
+
+    };
+
+    const initBrainWire = (scene: THREE.Scene, bboxMax: number[], initVisibility: boolean) => {
 
         const [mboxXLen, mboxYLen, mboxZLen] = bboxMax;
 
@@ -546,7 +645,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             brainWire.add(rightHemisphere);
 
             //scale brainwire to roughly fit image dimension 
-            const sf = 0.75;
+            const sf = 0.8;
             var templBbox = new THREE.Box3().setFromObject(brainWire);
 
             const [brainboxXLen, brainboxYLen, brainboxZLen] = templBbox.max.toArray();
@@ -557,6 +656,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 0, 0, 0, 1
             );
             brainWire.applyMatrix4(scaleTemplMatrix);
+            brainWire.visible = initVisibility;
             scene.add(brainWire);
             obj3d.current.brainWire = brainWire;
 
@@ -930,223 +1030,313 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             <span></span>
                         </div>
 
-
-
-                        <div
-                        >
-
-
-                            <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
-                                <div
-                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                >
-
-                                    <Switch
-                                        checked={showXSlice}
-                                        disabled={!obj3d.current.sliceX}
-                                        label="Sagittal (X) slices"
-                                        onChange={() => {
-                                            setShowSlice('x', !showXSlice);
-                                        }}
-                                    />
-
-                                    <Switch
-                                        checked={clipWire == 'x'}
-                                        disabled={!obj3d.current.sliceX || !showXSlice}
-                                        label="clip brainwire"
-                                        onChange={() => {
-                                            setClipWireBySlice('x', clipWire != 'x');
-                                        }}
-                                    />
-                                </div>
-                                <Slider
-                                    className="x-slider"
-                                    min={0}
-                                    max={obj3d.current.volume ? obj3d.current.volume.dimensions[0] - 1 : 0}
-                                    disabled={!obj3d.current.sliceX || !showXSlice}
-                                    labelValues={[]}
-                                    showTrackFill={false}
-                                    value={indexX}
-                                    onChange={(value: number) => {
-
-                                        setIndexX(value);
-                                        obj3d.current.sliceX.index = value;
-                                        obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
-
-                                        refreshClippingPlanes(clipWire);
-                                    }}
-                                />
-                                <div
-                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                >
-                                    <Button
-                                        disabled={!obj3d.current.volume}
-
-                                        onClick={() => {
-                                            setCameraRotation([0, 0, 1], [- rtState.current.camDistance, 0, 0]);
-                                        }}
-                                    >L</Button>
-                                    <Button
-                                        disabled={!obj3d.current.volume}
-                                        onClick={() => {
-                                            setCameraRotation([0, 0, 1], [rtState.current.camDistance, 0, 0]);
-                                        }}
-                                    >R</Button>
-
-                                </div>
-
-                            </div>
-                            <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
-                                <div
-                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                >
-
-                                    <Switch
-                                        checked={showYSlice}
-                                        disabled={!obj3d.current.sliceY}
-                                        label="Coronal (Y) slices"
-                                        onChange={() => {
-                                            setShowSlice('y', !showYSlice);
-                                        }}
-                                    />
-
-                                    <Switch
-                                        checked={clipWire == 'y'}
-                                        disabled={!obj3d.current.sliceY || !showYSlice}
-                                        label="clip brainwire"
-                                        onChange={() => {
-                                            setClipWireBySlice('y', clipWire != 'y');
-                                        }}
-                                    />
-                                </div>
-
-                                <Slider
-                                    className="y-slider"
-                                    min={0}
-                                    max={obj3d.current.volume ? obj3d.current.volume.dimensions[1] - 1 : 0}
-                                    disabled={!obj3d.current.sliceY || !showYSlice}
-                                    labelValues={[]}
-                                    showTrackFill={false}
-                                    value={indexY}
-                                    onChange={(value: number) => {
-
-                                        setIndexY(value);
-                                        obj3d.current.sliceY.index = value;
-                                        obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
-                                        refreshClippingPlanes(clipWire);
-                                    }}
-                                />
-
-                                <div
-                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                >
-                                    <Button
-                                        disabled={!obj3d.current.volume}
-
-                                        onClick={() => {
-                                            setCameraRotation([0, 0, 1], [0, - rtState.current.camDistance, 0]);
-                                        }}
-                                    >P</Button>
-                                    <Button
-                                        disabled={!obj3d.current.volume}
-                                        onClick={() => {
-                                            setCameraRotation([0, 0, 1], [0, rtState.current.camDistance, 0]);
-                                        }}
-                                    >A</Button>
-
-                                </div>
-
-                            </div>
-                            <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
-                                <div
-                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                >
-
-                                    <Switch
-                                        checked={showZSlice}
-                                        disabled={!obj3d.current.sliceZ}
-                                        label="Axial (Z) slices"
-                                        onChange={() => {
-                                            setShowSlice('z', !showZSlice);
-                                        }}
-                                    />
-                                    <Switch
-                                        checked={clipWire == 'z'}
-                                        disabled={!obj3d.current.sliceZ || !showZSlice}
-                                        label="clip brainwire"
-                                        onChange={() => {
-                                            setClipWireBySlice('z', clipWire != 'z');
-                                        }}
-                                    />
-                                </div>
-                                <Slider
-                                    className="z-slider"
-                                    min={0}
-                                    max={obj3d.current.volume ? obj3d.current.volume.dimensions[2] - 1 : 0}
-                                    disabled={!obj3d.current.sliceZ || !showZSlice}
-                                    labelValues={[]}
-                                    showTrackFill={false}
-                                    value={indexZ}
-                                    onChange={(value: number) => {
-
-                                        setIndexZ(value);
-                                        obj3d.current.sliceZ.index = value;
-                                        obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
-
-                                        refreshClippingPlanes(clipWire);
-                                    }}
-                                />
-
-                                <div
-                                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                >
-                                    <Button
-                                        disabled={!obj3d.current.volume}
-
-                                        onClick={() => {
-                                            setCameraRotation([0, 1, 0], [0, 0, - rtState.current.camDistance]);
-                                        }}
-                                    >I</Button>
-                                    <Button
-                                        disabled={!obj3d.current.volume}
-                                        onClick={() => {
-                                            setCameraRotation([0, 1, 0], [0, 0, rtState.current.camDistance]);
-                                        }}
-                                    >S</Button>
-
-                                </div>
-                            </div>
-
-                        </div>
-
                         <div
                             style={{
-                                marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
-                                display: 'grid',
-                                gridTemplateColumns: '30px 1fr',
-                            }}>
-                            <Icon
-                                style={
-                                    (!obj3d.current.volume ? { color: 'rgba(92, 112, 128, 0.2)' } : {})
-                                }
-                                icon="contrast"
-                            />
-                            <RangeSlider
-                                disabled={!obj3d.current.volume}
-                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
-                                max={obj3d.current.volume ? obj3d.current.volume.max : 100}
-                                stepSize={2}
-                                labelStepSize={obj3d.current.volume ? obj3d.current.volume.max : 20}
-                                onChange={(range: NumberRange) => {
-                                    obj3d.current.volume.windowLow = range[0];
-                                    obj3d.current.volume.windowHigh = range[1];
-                                    obj3d.current.volume.repaintAllSlices();
-                                    setVolumeRange(range);
+                                marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
+                            }}
+                        >
+                            <Tabs
+                                id="tabs"
+                                selectedTabId={showVol3D ? "tab-volume" : "tab-slice"}
+                                onChange={() => {
+                                    setShowVol3D(!showVol3D);
+                                    setDisplayVol3DOrSlice(!showVol3D);
                                 }}
-                                value={volumeRange}
-                            />
-                        </div>
+                            >
+                                <Tab
+                                    id="tab-volume"
+                                    disabled={!obj3d.current.volume}
+                                    title={<span><Icon icon="cube" /> Volume</span>}
+                                    panel={
+                                        <div>
+                                            <Switch
+                                                checked={castIso}
+                                                disabled={!obj3d.current.volume}
+                                                label="Ray Casting method"
+                                                alignIndicator={Alignment.RIGHT}
+                                                innerLabel="Maximum Intensity Projection"
+                                                innerLabelChecked="ISO"
+                                                onChange={() => {
+                                                    setCastIso(!castIso);
+                                                    obj3d.current.materialVol3D.uniforms['u_renderstyle'].value = castIso ? 0 : 1;
+                                                    renderAll();
+                                                }}
+                                            />
+                                            <span>Render threshold (ISO)</span>
+                                            <Slider
+                                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
+                                                max={obj3d.current.volume ? obj3d.current.volume.max : 1}
+                                                disabled={!obj3d.current.volume || !castIso}
+                                                stepSize={1}
+                                                labelValues={[]}
+                                                showTrackFill={false}
+                                                value={isothreshold}
+                                                onChange={(value: number) => {
+                                                    setIsothreshold(value);
+                                                    obj3d.current.materialVol3D.uniforms['u_renderthreshold'].value = value;
+                                                    renderAll();
+                                                }}
+                                            />
+                                            <span>Colormap boundary 1</span>
+                                            <Slider
+                                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
+                                                max={obj3d.current.volume ? obj3d.current.volume.max : 1}
+                                                disabled={!obj3d.current.volume}
+                                                stepSize={1}
+                                                labelValues={[]}
+                                                showTrackFill={false}
+                                                value={clims[0]}
+                                                onChange={(value: number) => {
+                                                    setClims([value, clims[1]]);
+                                                    obj3d.current.materialVol3D.uniforms['u_clim'].value.set(value, clims[1]);
+                                                    renderAll();
+                                                }}
+                                            />
+                                            <span>Colormap boundary 2</span>
+                                            <Slider
+                                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
+                                                max={obj3d.current.volume ? obj3d.current.volume.max : 1}
+                                                disabled={!obj3d.current.volume}
+                                                stepSize={1}
+                                                labelValues={[]}
+                                                showTrackFill={false}
+                                                value={clims[1]}
+                                                onChange={(value: number) => {
+                                                    setClims([clims[0], value]);
+                                                    obj3d.current.materialVol3D.uniforms['u_clim'].value.set(clims[0], value);
+                                                    renderAll();
+                                                }}
+                                            />
 
+                                        </div>
+                                    } />
+                                {/*<Tabs.Expander />*/}
+                                <Tab
+                                    id="tab-slice"
+                                    disabled={!obj3d.current.volume}
+                                    title={<span><Icon icon="layers" /> Slices </span>}
+
+                                    panel={
+                                        <>
+                                            <div
+                                            >
+
+
+                                                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+                                                    <div
+                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                                    >
+
+                                                        <Switch
+                                                            checked={showXSlice}
+                                                            disabled={!obj3d.current.sliceX}
+                                                            label="Sagittal (X) slices"
+                                                            onChange={() => {
+                                                                setShowSlice('x', !showXSlice);
+                                                            }}
+                                                        />
+
+                                                        <Switch
+                                                            checked={clipWire == 'x'}
+                                                            disabled={!obj3d.current.sliceX || !showXSlice}
+                                                            label="clip brainwire"
+                                                            onChange={() => {
+                                                                setClipWireBySlice('x', clipWire != 'x');
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <Slider
+                                                        className="x-slider"
+                                                        min={0}
+                                                        max={obj3d.current.volume ? obj3d.current.volume.dimensions[0] - 1 : 0}
+                                                        disabled={!obj3d.current.sliceX || !showXSlice}
+                                                        labelValues={[]}
+                                                        showTrackFill={false}
+                                                        value={indexX}
+                                                        onChange={(value: number) => {
+
+                                                            setIndexX(value);
+                                                            obj3d.current.sliceX.index = value;
+                                                            obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
+
+                                                            refreshClippingPlanes(clipWire);
+                                                        }}
+                                                    />
+                                                    <div
+                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                                    >
+                                                        <Button
+                                                            disabled={!obj3d.current.volume}
+
+                                                            onClick={() => {
+                                                                setCameraRotation([0, 0, 1], [- rtState.current.camDistance, 0, 0]);
+                                                            }}
+                                                        >L</Button>
+                                                        <Button
+                                                            disabled={!obj3d.current.volume}
+                                                            onClick={() => {
+                                                                setCameraRotation([0, 0, 1], [rtState.current.camDistance, 0, 0]);
+                                                            }}
+                                                        >R</Button>
+
+                                                    </div>
+
+                                                </div>
+                                                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+                                                    <div
+                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                                    >
+
+                                                        <Switch
+                                                            checked={showYSlice}
+                                                            disabled={!obj3d.current.sliceY}
+                                                            label="Coronal (Y) slices"
+                                                            onChange={() => {
+                                                                setShowSlice('y', !showYSlice);
+                                                            }}
+                                                        />
+
+                                                        <Switch
+                                                            checked={clipWire == 'y'}
+                                                            disabled={!obj3d.current.sliceY || !showYSlice}
+                                                            label="clip brainwire"
+                                                            onChange={() => {
+                                                                setClipWireBySlice('y', clipWire != 'y');
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    <Slider
+                                                        className="y-slider"
+                                                        min={0}
+                                                        max={obj3d.current.volume ? obj3d.current.volume.dimensions[1] - 1 : 0}
+                                                        disabled={!obj3d.current.sliceY || !showYSlice}
+                                                        labelValues={[]}
+                                                        showTrackFill={false}
+                                                        value={indexY}
+                                                        onChange={(value: number) => {
+
+                                                            setIndexY(value);
+                                                            obj3d.current.sliceY.index = value;
+                                                            obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
+                                                            refreshClippingPlanes(clipWire);
+                                                        }}
+                                                    />
+
+                                                    <div
+                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                                    >
+                                                        <Button
+                                                            disabled={!obj3d.current.volume}
+
+                                                            onClick={() => {
+                                                                setCameraRotation([0, 0, 1], [0, - rtState.current.camDistance, 0]);
+                                                            }}
+                                                        >P</Button>
+                                                        <Button
+                                                            disabled={!obj3d.current.volume}
+                                                            onClick={() => {
+                                                                setCameraRotation([0, 0, 1], [0, rtState.current.camDistance, 0]);
+                                                            }}
+                                                        >A</Button>
+
+                                                    </div>
+
+                                                </div>
+                                                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+                                                    <div
+                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                                    >
+
+                                                        <Switch
+                                                            checked={showZSlice}
+                                                            disabled={!obj3d.current.sliceZ}
+                                                            label="Axial (Z) slices"
+                                                            onChange={() => {
+                                                                setShowSlice('z', !showZSlice);
+                                                            }}
+                                                        />
+                                                        <Switch
+                                                            checked={clipWire == 'z'}
+                                                            disabled={!obj3d.current.sliceZ || !showZSlice}
+                                                            label="clip brainwire"
+                                                            onChange={() => {
+                                                                setClipWireBySlice('z', clipWire != 'z');
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <Slider
+                                                        className="z-slider"
+                                                        min={0}
+                                                        max={obj3d.current.volume ? obj3d.current.volume.dimensions[2] - 1 : 0}
+                                                        disabled={!obj3d.current.sliceZ || !showZSlice}
+                                                        labelValues={[]}
+                                                        showTrackFill={false}
+                                                        value={indexZ}
+                                                        onChange={(value: number) => {
+
+                                                            setIndexZ(value);
+                                                            obj3d.current.sliceZ.index = value;
+                                                            obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
+
+                                                            refreshClippingPlanes(clipWire);
+                                                        }}
+                                                    />
+
+                                                    <div
+                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                                                    >
+                                                        <Button
+                                                            disabled={!obj3d.current.volume}
+
+                                                            onClick={() => {
+                                                                setCameraRotation([0, 1, 0], [0, 0, - rtState.current.camDistance]);
+                                                            }}
+                                                        >I</Button>
+                                                        <Button
+                                                            disabled={!obj3d.current.volume}
+                                                            onClick={() => {
+                                                                setCameraRotation([0, 1, 0], [0, 0, rtState.current.camDistance]);
+                                                            }}
+                                                        >S</Button>
+
+                                                    </div>
+                                                </div>
+
+                                            </div>
+
+                                            <div
+                                                style={{
+                                                    marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
+                                                    display: 'grid',
+                                                    gridTemplateColumns: '30px 1fr',
+                                                }}>
+                                                <Icon
+                                                    style={
+                                                        (!obj3d.current.volume ? { color: 'rgba(92, 112, 128, 0.2)' } : {})
+                                                    }
+                                                    icon="contrast"
+                                                />
+                                                <RangeSlider
+                                                    disabled={!obj3d.current.volume}
+                                                    min={obj3d.current.volume ? obj3d.current.volume.min : 0}
+                                                    max={obj3d.current.volume ? obj3d.current.volume.max : 100}
+                                                    stepSize={2}
+                                                    labelStepSize={obj3d.current.volume ? obj3d.current.volume.max : 20}
+                                                    onChange={(range: NumberRange) => {
+                                                        obj3d.current.volume.windowLow = range[0];
+                                                        obj3d.current.volume.windowHigh = range[1];
+                                                        obj3d.current.volume.repaintAllSlices();
+                                                        setVolumeRange(range);
+                                                    }}
+                                                    value={volumeRange}
+                                                />
+                                            </div>
+                                        </>
+                                    } />
+                            </Tabs>
+
+                        </div>
                     </div>
                     <div>
                         <div
