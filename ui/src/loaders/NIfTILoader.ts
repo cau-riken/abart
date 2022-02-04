@@ -6,7 +6,8 @@ import {
 	Vector4,
 } from 'three';
 
-import { Volume } from 'three/examples/jsm/misc/Volume.js';
+//import { Volume } from 'three/examples/jsm/misc/Volume.js';
+import { Volume } from '../misc/Volume';
 
 import * as Nifti from "nifti-reader-js";
 
