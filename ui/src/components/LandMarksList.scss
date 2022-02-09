@@ -1,0 +1,17 @@
+.landmark-table {
+    background-color: #605f5f87;
+    border: solid 1px #c0c0c047;
+    color: #FFF;
+}
+
+.landmark-line {
+    display: grid;
+    grid-template-columns: 24px 20px 100px 1fr 20px ;
+    gap: 3px;
+    border-top: dotted 1px #c0c0c047;
+}
+
+.landmark-line.landmark-high,
+.landmark-line:hover {
+    background-color: #566266dd;
+}

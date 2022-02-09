@@ -74,6 +74,7 @@ function VolumeSlice( volume, index, axis ) {
 	 */
 	this.mesh = new Mesh( this.geometry, material );
 	this.mesh.matrixAutoUpdate = false;
+	this.mesh.userData = { isSlice:true };
 	/**
 	 * @member {Boolean} geometryNeedsUpdate If set to true, updateGeometry will be triggered at the next repaint
 	 */

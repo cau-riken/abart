@@ -36,6 +36,8 @@ import {
 
 import { RegistrationTask } from "../RegistrationTaskHandler";
 import SinkLogger from "./SinkLogger";
+import LandMarksList from "./LandMarksList";
+import { MarkInstance, LandMark  } from "./LandMarksList";
 
 import "./VolumePreview.scss";
 
@@ -43,6 +45,27 @@ import { setupAxesHelper } from './Utils';
 
 import { Volume } from "../misc/Volume";
 import { VolumeSlice } from "../misc/VolumeSlice";
+import LandmarksManager, { CreateLandMarkOptions } from "./LandmarksManager";
+
+
+const MarmosetLandMarks: LandMark[] = [
+
+    { id: 'ac', color: '#f1c40f', coord: [0, 25, -10], name: 'ac', longname: 'Anterior Commissure', descr: 'Mid-sagittal left point at start of ac in coronal view going from anterior to posterior.' },
+
+    { id: 'pc', color: '#9b59b6', coord: [0, -5, -8], name: 'pc', longname: 'Posterior Commissure', descr: 'Mid-sagittal left point at start of pc in coronal view going from anterior to posterior.' },
+
+    { id: 'cc-s', color: '#3498db', coord: [0, 0, 0], name: 'cc (start)', longname: 'Corpus Callosum', descr: 'Mid-sagittal left point at start of cc in coronal view going from anterior to posterior.' },
+    { id: 'cc-e', color: '#3498db', coord: [0, 0, 0], name: 'cc (end)', longname: 'Corpus Callosum', descr: 'Mid-sagittal left point at end of cc in coronal view going from anterior to posterior.' },
+
+    { id: 'MB-l', color: '#c0392b', coord: [10, -43, -26], name: 'MB (left)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the left MB in coronal view going from anterior to posterior.' },
+    { id: 'MB-r', color: '#c0392b', coord: [10, -43, -26], name: 'MB (right)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the right MB in coronal view going from anterior to posterior.' },
+
+    { id: 'DLG-l', color: '#28b463', coord: [0, 0, 0], name: 'DLG (left)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the left DLG in coronal view, moving from anterior to posterior.' },
+    { id: 'DLG-r', color: '#28b463', coord: [0, 0, 0], name: 'DLG (right)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the right DLG in coronal view, moving from anterior to posterior.' },
+    { id: '4V-f', color: '#dc7633', coord: [0, 0, 0], name: '4V (fastigium)', longname: 'Fastigium of the fourth Ventricle', descr: 'Mid-saggital point of the fastigium of the fourth ventricle, identified in the sagittal plane.' },
+
+];
+
 
 export type LoadedVolumeFile = {
     file: File | undefined,
@@ -75,6 +98,8 @@ export type RealTimeState = {
     deltaRotation: number[],
     stopQ: THREE.Quaternion,
     camDistance: number,
+    showVol3D: boolean,
+    normPointer: THREE.Vector2,
 };
 
 export type Obj3dRefs = {
@@ -87,7 +112,7 @@ export type Obj3dRefs = {
     renderer2: THREE.Renderer,
     aspect2: number,
 
-    camera: THREE.PerspectiveCamera,
+    camera: THREE.Camera,
     scene: THREE.Scene,
 
     camera2: THREE.PerspectiveCamera,
@@ -97,6 +122,9 @@ export type Obj3dRefs = {
     vol3D: THREE.Mesh,
     materialVol3D: THREE.ShaderMaterial,
 
+    marksGroup: THREE.Group,
+
+    cube: THREE.Mesh,
     volume: Volume,
     sliceX: VolumeSlice,
     sliceY: VolumeSlice,
@@ -105,9 +133,10 @@ export type Obj3dRefs = {
     boxAniMixer: THREE.AnimationMixer,
     boxAninAction: THREE.AnimationAction,
 
-    disposable: [],
+    disposable: THREE.Object3D[],
 };
 
+const landmarksColors = new Map(MarmosetLandMarks.map(m => [m.id, m.color]));
 
 const SELECTED_FILE_FAKEURL = "selected_file";
 
@@ -150,16 +179,29 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [showLogs, setShowLogs] = React.useState(false);
     const [loglines, setLoglines] = React.useState<string[]>([]);
 
-    const rtState = React.useRef<RealTimeState>({});
+    const [nextLandmarkId, setNextLandmarkId] = React.useState('');
+    const [markInstances, setMarkInstances] = React.useState(new Map<string, MarkInstance>());
+    const [highMarks, setHighMarks] = React.useState<string[]>([]);
+
+
+    const rtState = React.useRef<RealTimeState>({ normPointer: new THREE.Vector2() });
     React.useEffect(() => {
         rtState.current = {
             ...rtState.current,
             fixedWire,
             deltaRotation,
             brainWireInitRotation,
+            showVol3D,
         };
         renderAll();
     });
+
+    //stop animation when rendrering volume (as the shader becomes slow when the animation is processed)
+    React.useEffect(() => {
+        if (showVol3D && obj3d.current?.boxAninAction) {
+            obj3d.current.boxAninAction.stop();
+        }
+    }, [showVol3D]);
 
 
     const revokeObjectURLs = () => {
@@ -184,6 +226,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
         setShowXSlice(false);
         setShowYSlice(false);
         setShowZSlice(true);
+
+        setMarkInstances(new Map());
 
         if (props.volumeFile) {
 
@@ -239,11 +283,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
                 scene.add(hemiLight);
 
-                // Colormap textures
-                const cmtextures = {
-                    viridis: new THREE.TextureLoader().load('resources/cm_viridis.png'),
-                    gray: new THREE.TextureLoader().load('resources/cm_gray.png')
-                };
+                /*
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+                dirLight.position.set(200, 200, 200);
+                scene.add(dirLight);
+                */
 
                 const niftiloadr = new NIfTILoader(manager);
 
@@ -256,62 +300,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             obj3d.current.volume = volume;
 
                             initVol3D(scene, volume, true);
+                            initSlices(scene, volume);
 
-                            //box helper to see the extend of the volume
-                            const geometry = new THREE.BoxGeometry(volume.xLength, volume.yLength, volume.zLength);
-                            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-                            //const material = new THREE.LineBasicMaterial( { color: 0x8080ff, fog: false, transparent: true, opacity: 0.6 } );
-                            const cube = new THREE.Mesh(geometry, material);
-                            cube.visible = false;
-                            const box = new THREE.BoxHelper(cube, 0xffff00);
-
-                            scene.add(box);
-                            box.applyMatrix4(volume.matrix);
-                            scene.add(cube);
-                            obj3d.current.box = box;
-
-                            //animation to make the box visible only when camera is moved (rotation, "zoom")
-                            const visibilityKF = new THREE.BooleanKeyframeTrack('.visible', [0, 0.2], [true, false]);
-                            const clip = new THREE.AnimationClip('InAndOut', -1, [visibilityKF]);
-                            const mixer = new THREE.AnimationMixer(box);
-                            const action = mixer.clipAction(clip);
-                            action.setLoop(THREE.LoopOnce, 1);
-                            obj3d.current.boxAniMixer = mixer;
-                            obj3d.current.boxAninAction = action;
-
-                            box.visible = false;
-
-                            //z plane
-                            const initSliceZ = Math.floor(volume.dimensions[2] / 4);
-                            const sliceZ = volume.extractSlice('z', initSliceZ);
-                            sliceZ.mesh.visible = showZSlice;
-                            scene.add(sliceZ.mesh);
-                            obj3d.current.sliceZ = sliceZ;
-                            setIndexZ(obj3d.current.sliceZ.index);
-
-                            //y plane
-                            const initSliceY = Math.floor(volume.dimensions[1] / 2);
-                            const sliceY = volume.extractSlice('y', initSliceY);
-
-                            sliceY.mesh.visible = showYSlice;
-                            scene.add(sliceY.mesh);
-                            obj3d.current.sliceY = sliceY;
-                            setIndexY(obj3d.current.sliceY.index);
-
-                            //x plane
-                            const initSliceX = Math.floor(volume.dimensions[0] / 2);
-                            const sliceX = volume.extractSlice('x', initSliceX);
-                            sliceX.mesh.visible = showXSlice;
-                            scene.add(sliceX.mesh);
-                            obj3d.current.sliceX = sliceX;
-                            setIndexX(obj3d.current.sliceX.index);
-
-                            setVolumeRange([
-                                obj3d.current.volume.windowLow,
-                                obj3d.current.volume.windowHigh
-                            ]);
-
-                            const mriBbox = new THREE.Box3().setFromObject(cube);
+                            const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
                             const mboxZLen = mriBbox.max.toArray()[2];
                             const camDistance = 6 * mboxZLen;
                             camera.position.z = camDistance;
@@ -321,7 +312,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             initBrainWire(scene, mriBbox.max.toArray(), false);
                             setBrainWireFrame(typeof clipWire == 'undefined');
 
-
+                            //group for landmarks
+                            obj3d.current.marksGroup = new THREE.Group();
+                            scene.add(obj3d.current.marksGroup);
 
                             const controls = new ArcballControls(camera, renderer.domElement, scene);
 
@@ -331,11 +324,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 updateBrainWireRotation();
 
                                 //show Volume's bounding-box while rotating
-                                //FIXME animation slows down volumeshader
-                                /*
-                                obj3d.current.boxAninAction.stop();
-                                obj3d.current.boxAninAction.play();
-                                */
+                                if (!rtState.current.showVol3D) {
+                                    obj3d.current.boxAninAction.stop();
+                                    obj3d.current.boxAninAction.play();
+                                }
 
                                 renderAll();
 
@@ -483,6 +475,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
         obj3d.current.sliceZ?.dispose();
         obj3d.current.controls?.dispose();
 
+        LandmarksManager.dispose(obj3d.current.marksGroup);
+
         obj3d.current.disposable.forEach(d => d.dispose());
     };
 
@@ -597,6 +591,65 @@ const VolumePreview = (props: VolumePreviewProps) => {
         }
 
     };
+
+    const initSlices = (scene: THREE.Scene, volume: Volume) => {
+
+        //box helper to see the extend of the volume
+        const geometry = new THREE.BoxGeometry(volume.xLength, volume.yLength, volume.zLength);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        //const material = new THREE.LineBasicMaterial( { color: 0x8080ff, fog: false, transparent: true, opacity: 0.6 } );
+        const cube = new THREE.Mesh(geometry, material);
+        cube.visible = false;
+        const box = new THREE.BoxHelper(cube, 0xffff00);
+        obj3d.current.cube = cube;
+
+        scene.add(box);
+        box.applyMatrix4(volume.matrix);
+        scene.add(cube);
+
+        //animation to make the box visible only when camera is moved (rotation, "zoom")
+        const visibilityKF = new THREE.BooleanKeyframeTrack('.visible', [0, 0.2], [true, false]);
+        const clip = new THREE.AnimationClip('InAndOut', -1, [visibilityKF]);
+        const mixer = new THREE.AnimationMixer(box);
+        const action = mixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce, 1);
+        obj3d.current.boxAniMixer = mixer;
+        obj3d.current.boxAninAction = action;
+
+        box.visible = false;
+
+        //z plane
+        const initSliceZ = Math.floor(volume.dimensions[2] / 4);
+        const sliceZ = volume.extractSlice('z', initSliceZ);
+        sliceZ.mesh.visible = showZSlice;
+        scene.add(sliceZ.mesh);
+        obj3d.current.sliceZ = sliceZ;
+        setIndexZ(obj3d.current.sliceZ.index);
+
+        //y plane
+        const initSliceY = Math.floor(volume.dimensions[1] / 2);
+        const sliceY = volume.extractSlice('y', initSliceY);
+
+        sliceY.mesh.visible = showYSlice;
+        scene.add(sliceY.mesh);
+        obj3d.current.sliceY = sliceY;
+        setIndexY(obj3d.current.sliceY.index);
+
+        //x plane
+        const initSliceX = Math.floor(volume.dimensions[0] / 2);
+        const sliceX = volume.extractSlice('x', initSliceX);
+        sliceX.mesh.visible = showXSlice;
+        scene.add(sliceX.mesh);
+        obj3d.current.sliceX = sliceX;
+        setIndexX(obj3d.current.sliceX.index);
+
+        setVolumeRange([
+            obj3d.current.volume.windowLow,
+            obj3d.current.volume.windowHigh
+        ]);
+
+    };
+
 
     const initBrainWire = (scene: THREE.Scene, bboxMax: number[], initVisibility: boolean) => {
 
@@ -785,7 +838,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             setBrainWireFrame(true);
             obj3d.current.renderer.localClippingEnabled = false;
         }
-    }
+    };
 
 
     const setShowSlice = (slice: string, newShowSlice: boolean) => {
@@ -806,8 +859,16 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (!newShowSlice) {
             setClipWireBySlice(slice, false);
         }
+    };
+
     }
 
+
+    const refreshNormPointer = (clientX: number, clientY: number) => {
+        const rect = volRendererContainer.current?.getBoundingClientRect();
+        rtState.current.normPointer.x = rect ? ((clientX / rect.width) * 2 - 1) : 0;
+        rtState.current.normPointer.y = rect ? (- (clientY / rect.height) * 2 + 1) : 0;
+    };
 
 
     return (
@@ -816,7 +877,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
             style={{
                 maxWidth: '100%',
                 maxHeight: '100%',
-                height: '100%'
+                height: '100%',
+                userSelect: 'none',
             }}
         >
             {showLogs
@@ -892,7 +954,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 {alertMessage}
                             </Alert>
                             :
-                            null}
+                            null
+                        }
                         <div
                             className="volRendererCont"
                             style={{
@@ -901,6 +964,51 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             }}
 
                             ref={volRendererContainer}
+                            onClick={(event) => {
+                                if (event.shiftKey) {
+                                    refreshNormPointer(event.clientX, event.clientY);
+                                    const res = LandmarksManager.processPicking(
+                                        rtState.current.normPointer,
+                                        obj3d.current.camera,
+                                        obj3d.current.scene,
+                                        obj3d.current.marksGroup,
+                                        (
+                                            (nextLandmarkId != '')
+                                                ?
+                                                { color: landmarksColors.get(nextLandmarkId) } as CreateLandMarkOptions
+                                                :
+                                                undefined
+                                        ),
+                                        (instance, pos) => {
+                                            console.log('pos', pos.toArray());
+                                            markInstances.set(nextLandmarkId,
+                                                {
+                                                    landmarkId: nextLandmarkId,
+                                                    coord: pos.toArray(),
+                                                    instanceId: instance
+                                                }
+                                            );
+                                            setMarkInstances(new Map(markInstances));
+                                            setNextLandmarkId('');
+                                        }
+                                    );
+
+                                    res.modified && renderAll();
+                                }
+                            }}
+                            onMouseMove={(event) => {
+                                refreshNormPointer(event.clientX, event.clientY);
+                                const res = LandmarksManager.processPicking(rtState.current.normPointer, obj3d.current.camera, obj3d.current.scene, obj3d.current.marksGroup);
+
+                                const highlighted: string[] = [];
+                                markInstances.forEach((mark, landmarkId) => {
+                                    if (res.appeared.includes(mark.instanceId)) {
+                                        highlighted.push(landmarkId);
+                                    }
+                                });
+                                setHighMarks(highlighted);
+                                res.modified && renderAll();
+                            }}
                         >
                         </div>
                         <div
@@ -919,7 +1027,47 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             }}
                         >
                         </div>
-
+                        {obj3d.current.volume
+                            ?
+                            <div
+                                style={{
+                                    border: 'none',
+                                    margin: 'auto',
+                                    padding: 0,
+                                    position: 'absolute',
+                                    right: 0,
+                                }}
+                            >
+                                <LandMarksList
+                                    landmarkset={MarmosetLandMarks}
+                                    highlighted={highMarks}
+                                    marked={new Set(markInstances.keys())}
+                                    onSetNextLandmarkId={(landmarkId) => setNextLandmarkId(landmarkId)}
+                                    onLandmarkRemove={(landmarkId) => {
+                                        const mark = markInstances.get(landmarkId);
+                                        if (mark) {
+                                            markInstances.delete(landmarkId);
+                                            setMarkInstances(new Map(markInstances));
+                                            LandmarksManager.remove(obj3d.current.marksGroup, mark.instanceId);
+                                        }
+                                    }}
+                                    onMarkMouseEnter={(landmarkId) => {
+                                        if (markInstances.has(landmarkId)) {
+                                            LandmarksManager.setHighlight(obj3d.current.marksGroup, markInstances.get(landmarkId).instanceId);
+                                            renderAll();
+                                        }
+                                    }}
+                                    onMarkMouseLeave={(landmarkId) => {
+                                        if (markInstances.has(landmarkId)) {
+                                            LandmarksManager.unsetHighlight(obj3d.current.marksGroup, markInstances.get(landmarkId).instanceId);
+                                            renderAll();
+                                        }
+                                    }}
+                                />
+                            </div>
+                            :
+                            null
+                        }
 
                     </div>
                 </ResizeSensor2>
