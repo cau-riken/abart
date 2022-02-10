@@ -108,8 +108,8 @@ class LandmarksManager {
     };
 
 
-    static processPicking(normPointer: THREE.Vector2, camera: THREE.Camera, scene: THREE.Scene, markGroup: THREE.Group, 
-        createOptions?: CreateLandMarkOptions, 
+    static processPicking(normPointer: THREE.Vector2, camera: THREE.Camera, scene: THREE.Scene, markGroup: THREE.Group,
+        createOptions?: CreateLandMarkOptions,
         onCreated?: (instanceId: string, pos: THREE.Vector3) => void) {
 
         let modified = false;
@@ -150,7 +150,7 @@ class LandmarksManager {
                             segment.userData = markData;
                             mark.add(segment);
 
-                            const mat =  LandmarksManager.markerConf.planeMats[i];
+                            const mat = LandmarksManager.markerConf.planeMats[i];
                             const plane = new THREE.Mesh(geom, mat);
                             
                             plane.userData = markData;

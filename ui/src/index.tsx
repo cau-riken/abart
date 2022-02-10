@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as ReactDOM from "react-dom";
+import { Provider } from "jotai";
 
 import 'normalize.css';
 import "@blueprintjs/core/lib/css/blueprint.css";
@@ -15,11 +16,13 @@ document
     .querySelectorAll('#abart-root')
     .forEach(parentContainer => {
 
-        parentContainer.style="width:100%; height:100%;"; 
-        
+        parentContainer.style = "width:100%; height:100%;";
+
         ReactDOM.render(
             <React.StrictMode>
-                <UIMain />
+                <Provider>
+                    <UIMain />
+                </Provider>
             </React.StrictMode>,
             parentContainer
         )

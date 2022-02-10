@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useAtom } from "jotai";
 
 
 import * as THREE from 'three';
@@ -34,10 +35,12 @@ import {
     ResizeSensor2,
 } from "@blueprintjs/popover2";
 
-import { RegistrationTask } from "../RegistrationTaskHandler";
+import * as StAtm from '../StateAtoms';
+
+
 import SinkLogger from "./SinkLogger";
 import LandMarksList from "./LandMarksList";
-import { MarkInstance, LandMark  } from "./LandMarksList";
+import { MarkInstance, LandMark } from "./LandMarksList";
 
 import "./VolumePreview.scss";
 
@@ -46,25 +49,7 @@ import { setupAxesHelper } from './Utils';
 import { Volume } from "../misc/Volume";
 import { VolumeSlice } from "../misc/VolumeSlice";
 import LandmarksManager, { CreateLandMarkOptions } from "./LandmarksManager";
-
-
-const MarmosetLandMarks: LandMark[] = [
-
-    { id: 'ac', color: '#f1c40f', coord: [0, 25, -10], name: 'ac', longname: 'Anterior Commissure', descr: 'Mid-sagittal left point at start of ac in coronal view going from anterior to posterior.' },
-
-    { id: 'pc', color: '#9b59b6', coord: [0, -5, -8], name: 'pc', longname: 'Posterior Commissure', descr: 'Mid-sagittal left point at start of pc in coronal view going from anterior to posterior.' },
-
-    { id: 'cc-s', color: '#3498db', coord: [0, 0, 0], name: 'cc (start)', longname: 'Corpus Callosum', descr: 'Mid-sagittal left point at start of cc in coronal view going from anterior to posterior.' },
-    { id: 'cc-e', color: '#3498db', coord: [0, 0, 0], name: 'cc (end)', longname: 'Corpus Callosum', descr: 'Mid-sagittal left point at end of cc in coronal view going from anterior to posterior.' },
-
-    { id: 'MB-l', color: '#c0392b', coord: [10, -43, -26], name: 'MB (left)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the left MB in coronal view going from anterior to posterior.' },
-    { id: 'MB-r', color: '#c0392b', coord: [10, -43, -26], name: 'MB (right)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the right MB in coronal view going from anterior to posterior.' },
-
-    { id: 'DLG-l', color: '#28b463', coord: [0, 0, 0], name: 'DLG (left)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the left DLG in coronal view, moving from anterior to posterior.' },
-    { id: 'DLG-r', color: '#28b463', coord: [0, 0, 0], name: 'DLG (right)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the right DLG in coronal view, moving from anterior to posterior.' },
-    { id: '4V-f', color: '#dc7633', coord: [0, 0, 0], name: '4V (fastigium)', longname: 'Fastigium of the fourth Ventricle', descr: 'Mid-saggital point of the fastigium of the fourth ventricle, identified in the sagittal plane.' },
-
-];
+import PreviewControls from "./PreviewControls";
 
 
 export type LoadedVolumeFile = {
@@ -91,16 +76,6 @@ const setupInset = (insetAspect: number, camera: THREE.Camera) => {
 
     return { insetScene, insetCamera };
 }
-
-export type RealTimeState = {
-    fixedWire: boolean,
-    brainWireInitRotation: THREE.Quaternion,
-    deltaRotation: number[],
-    stopQ: THREE.Quaternion,
-    camDistance: number,
-    showVol3D: boolean,
-    normPointer: THREE.Vector2,
-};
 
 export type Obj3dRefs = {
 
@@ -136,77 +111,316 @@ export type Obj3dRefs = {
     disposable: THREE.Object3D[],
 };
 
-const landmarksColors = new Map(MarmosetLandMarks.map(m => [m.id, m.color]));
 
 const SELECTED_FILE_FAKEURL = "selected_file";
 
 const VolumePreview = (props: VolumePreviewProps) => {
 
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [alertMessage, setAlertMessage] = React.useState<JSX.Element | undefined>();
+    const [viewMode, setViewMode] = useAtom(StAtm.viewMode);
+
+    const [isLoading, setIsLoading] = useAtom(StAtm.isLoading);
+    const [alertMessage, setAlertMessage] = useAtom(StAtm.alertMessage);
+
+    const [deltaRotation, setDeltaRotation] = useAtom(StAtm.deltaRotation);
+    const [cameraRotation,] = useAtom(StAtm.cameraRotation);
+
+    const [showBrainModel, setShowBrainModel] = useAtom(StAtm.showBrainModel);
+    const [brainModelMode, setBrainModelMode] = useAtom(StAtm.brainModelMode);
+
+    const [clipWire, setClipWire] = useAtom(StAtm.clipWire);
+    const [brainWireInitRotation, setBrainWireInitRotation] = useAtom(StAtm.brainWireInitRotation);
+    const [fixedWire, setFixedWire] = useAtom(StAtm.fixedWire);
+
+    const [isothreshold, setIsothreshold] = useAtom(StAtm.isothreshold);
+    const [clims, setClims] = useAtom(StAtm.clims);
+    const [castIso, setCastIso] = useAtom(StAtm.castIso);
+
+    const [showXSlice, setShowXSlice] = useAtom(StAtm.showXSlice);
+    const [showYSlice, setShowYSlice] = useAtom(StAtm.showYSlice);
+    const [showZSlice, setShowZSlice] = useAtom(StAtm.showZSlice);
+    const [volumeRange, setVolumeRange] = useAtom(StAtm.volumeRange);
+
+    const [indexX, setIndexX] = useAtom(StAtm.indexX);
+    const [indexY, setIndexY] = useAtom(StAtm.indexY);
+    const [indexZ, setIndexZ] = useAtom(StAtm.indexZ);
+
+    const [showLogs,] = useAtom(StAtm.showLogs);
+    const [loglines,] = useAtom(StAtm.loglines);
+
+    const [knownLandMarks,] = useAtom(StAtm.knownLandMarks);
+    const [knownLandMarksAry,] = useAtom(StAtm.knownLandMarksAry);
+
+    const [nextLandmarkId, setNextLandmarkId] = useAtom(StAtm.nextLandmarkId);
+    const [markInstances, setMarkInstances] = useAtom(StAtm.markInstances);
+    const [highMarks, setHighMarks] = useAtom(StAtm.highMarks);
 
     const volRendererContainer = React.useRef<HTMLDivElement>();
     const clock = React.useRef(new THREE.Clock());
 
     const objectURLs = React.useRef<string[]>([]);
-
     const volRendererInset = React.useRef<HTMLDivElement>();
 
     const obj3d = React.useRef<Obj3dRefs>({ disposable: [] });
 
-    const [deltaRotation, setDeltaRotation] = React.useState([0, 0, 0]);
-
-    const [showWire, setShowWire] = React.useState(false);
-    const [clipWire, setClipWire] = React.useState<string | undefined>();
-    const [brainWireInitRotation, setBrainWireInitRotation] = React.useState(new THREE.Quaternion());
-    const [fixedWire, setFixedWire] = React.useState(false);
-
-    const [showVol3D, setShowVol3D] = React.useState(true);
-    const [isothreshold, setIsothreshold] = React.useState(0.5);
-    const [clims, setClims] = React.useState([0, 1]);
-    const [castIso, setCastIso] = React.useState(true);
-
-    const [showXSlice, setShowXSlice] = React.useState(false);
-    const [showYSlice, setShowYSlice] = React.useState(false);
-    const [showZSlice, setShowZSlice] = React.useState(true);
-    const [volumeRange, setVolumeRange] = React.useState<[number, number]>([0, 0]);
-
-    const [indexX, setIndexX] = React.useState(0);
-    const [indexY, setIndexY] = React.useState(0);
-    const [indexZ, setIndexZ] = React.useState(0);
-
-    const [remoteTask, setRemoteTask] = React.useState<RegistrationTask>();
-    const [showLogs, setShowLogs] = React.useState(false);
-    const [loglines, setLoglines] = React.useState<string[]>([]);
-
-    const [nextLandmarkId, setNextLandmarkId] = React.useState('');
-    const [markInstances, setMarkInstances] = React.useState(new Map<string, MarkInstance>());
-    const [highMarks, setHighMarks] = React.useState<string[]>([]);
-
-
-    const rtState = React.useRef<RealTimeState>({ normPointer: new THREE.Vector2() });
+    const rtState = React.useRef<StAtm.RealTimeState>({ normPointer: new THREE.Vector2() });
     React.useEffect(() => {
+
         rtState.current = {
             ...rtState.current,
             fixedWire,
             deltaRotation,
             brainWireInitRotation,
-            showVol3D,
+            viewMode,
         };
         renderAll();
+
     });
 
-    //stop animation when rendrering volume (as the shader becomes slow when the animation is processed)
     React.useEffect(() => {
-        if (showVol3D && obj3d.current?.boxAninAction) {
+
+        if (obj3d.current.vol3D) {
+
+            if (StAtm.ViewMode.Volume3D === viewMode) {
+                obj3d.current.vol3D.visible = true;
+
+                obj3d.current.sliceX.mesh.visible = false;
+                obj3d.current.sliceY.mesh.visible = false;
+                obj3d.current.sliceZ.mesh.visible = false;
+            } else {
+                obj3d.current.vol3D.visible = false;
+
+                obj3d.current.sliceX.mesh.visible = showXSlice;
+                obj3d.current.sliceY.mesh.visible = showYSlice;
+                obj3d.current.sliceZ.mesh.visible = showZSlice;
+            }
+        }
+
+        //stop animation when rendrering volume (as the shader becomes slow when the animation is processed)
+        if (StAtm.ViewMode.Volume3D === viewMode && obj3d.current?.boxAninAction) {
             obj3d.current.boxAninAction.stop();
         }
-    }, [showVol3D]);
+
+        renderAll();
+
+    }, [viewMode]);
 
 
-    const revokeObjectURLs = () => {
-        objectURLs.current.forEach((url) => URL.revokeObjectURL(url));
-    }
+    React.useEffect(() => {
+
+        updateInset();
+        renderAll();
+
+    }, [deltaRotation]);
+
+
+    React.useEffect(() => {
+
+        const wireframe = brainModelMode === StAtm.BrainModelMode.Wire;
+        if (obj3d.current.brainWire) {
+            obj3d.current.brainWire.traverse(function (child) {
+                if (child.isMesh) {
+                    child.material.wireframe = wireframe;
+                }
+            });
+        }
+        renderAll();
+
+    }, [brainModelMode]);
+
+    React.useEffect(() => {
+        if (obj3d.current.controls) {
+            obj3d.current.controls.reset();
+            obj3d.current.camera.up.fromArray(cameraRotation.up);
+            obj3d.current.camera.position.fromArray(cameraRotation.position);
+            obj3d.current.camera.lookAt(0, 0, 0);
+
+            updateBrainWireRotation();
+            renderAll();
+        }
+
+    }, [cameraRotation]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.sliceX) {
+            obj3d.current.sliceX.mesh.visible = showXSlice;
+            if (!showXSlice && clipWire === StAtm.ClipWireMode.ClipX) {
+                setClipWire(StAtm.ClipWireMode.None);
+            }
+            renderAll();
+        }
+
+    }, [showXSlice]);
+
+    React.useEffect(() => {
+
+        if (obj3d.current.sliceY) {
+            obj3d.current.sliceY.mesh.visible = showYSlice;
+            if (!showYSlice && clipWire == StAtm.ClipWireMode.ClipY) {
+                setClipWire(StAtm.ClipWireMode.None);
+            }
+            renderAll();
+        }
+
+    }, [showYSlice]);
+
+    React.useEffect(() => {
+
+        if (obj3d.current.sliceZ) {
+            obj3d.current.sliceZ.mesh.visible = showZSlice;
+            if (!showZSlice && clipWire === StAtm.ClipWireMode.ClipZ) {
+                setClipWire(StAtm.ClipWireMode.None);
+            }
+            renderAll();
+        }
+
+    }, [showZSlice]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.renderer) {
+            if (clipWire != StAtm.ClipWireMode.None) {
+                //wireframe clipping enabled
+
+                setBrainModelMode(StAtm.BrainModelMode.Clipped);
+                refreshClippingPlanes(clipWire);
+                obj3d.current.renderer.localClippingEnabled = true;
+
+            } else {
+                //wireframe clipping disabled
+
+                setBrainModelMode(StAtm.BrainModelMode.Wire);
+                obj3d.current.renderer.localClippingEnabled = false;
+            }
+            renderAll();
+        }
+
+    }, [clipWire]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.sliceX) {
+            obj3d.current.sliceX.index = indexX;
+            obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
+            if (clipWire === StAtm.ClipWireMode.ClipX) {
+                refreshClippingPlanes(clipWire);
+            }
+            renderAll();
+        }
+
+    }, [indexX]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.sliceY) {
+            obj3d.current.sliceY.index = indexY;
+            obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
+            if (clipWire === StAtm.ClipWireMode.ClipY) {
+                refreshClippingPlanes(clipWire);
+            }
+            renderAll();
+        }
+
+    }, [indexY]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.sliceZ) {
+            obj3d.current.sliceZ.index = indexZ;
+            obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
+            if (clipWire === StAtm.ClipWireMode.ClipZ) {
+                refreshClippingPlanes(clipWire);
+            }
+            renderAll();
+        }
+
+    }, [indexZ]);
+
+
+    React.useEffect(() => {
+        updateBrainWireRotation(true);
+        renderAll();
+    }, [brainWireInitRotation]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.volume) {
+            obj3d.current.volume.windowLow = volumeRange[0];
+            obj3d.current.volume.windowHigh = volumeRange[1];
+            obj3d.current.volume.repaintAllSlices();
+        }
+
+    }, [volumeRange]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.materialVol3D) {
+            obj3d.current.materialVol3D.uniforms['u_renderstyle'].value = castIso ? 1 : 0;
+            renderAll();
+        }
+
+    }, [castIso]);
+
+    React.useEffect(() => {
+
+        if (obj3d.current.materialVol3D) {
+            obj3d.current.materialVol3D.uniforms['u_renderthreshold'].value = isothreshold;
+        }
+
+    }, [isothreshold]);
+
+    React.useEffect(() => {
+
+        if (obj3d.current.materialVol3D) {
+            obj3d.current.materialVol3D.uniforms['u_clim'].value.set(clims[0], clims[1]);
+        }
+
+    }, [clims]);
+
+
+    React.useEffect(() => {
+
+        if (obj3d.current.brainWire) {
+            obj3d.current.brainWire.visible = showBrainModel;
+            renderAll();
+        }
+
+    }, [showBrainModel]);
+
+    React.useEffect(() => {
+        if (obj3d.current.camera) {
+            if (!fixedWire) {
+                //from now on brainwire will look like it's moving along the camera
+                //(but it is actually static)
+
+                //camera rotation when stoping updating brainwire rotation
+                obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
+
+            } else {
+                //from now on brainwire will look like it's fixed in its current pos
+                //(but it is actually being rotated)
+
+                setBrainWireInitRotation(getRotationOffset());
+            }
+            renderAll();
+        }
+    }, [fixedWire]);
+
+
+    React.useEffect(() => {
+
+        rtState.current.brainWireInitRotation = brainWireInitRotation;
+        renderAll();
+
+    }, [brainWireInitRotation]);
+
 
     //when Volume changed (as a result of local file selection) 
     React.useEffect(() => {
@@ -216,12 +430,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
         setDeltaRotation([0, 0, 0]);
         rtState.current.stopQ = new THREE.Quaternion();
 
-        setShowWire(false);
-        setClipWire(undefined);
+        setShowBrainModel(false);
+        setClipWire(StAtm.ClipWireMode.None);
         setBrainWireInitRotation(new THREE.Quaternion());
         setFixedWire(false);
 
-        setShowVol3D(true);
         setVolumeRange([0, 0]);
         setShowXSlice(false);
         setShowYSlice(false);
@@ -233,13 +446,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
             setIsLoading(true);
 
-            //if a volume was already loaded
-            if (obj3d.current.volume) {
-                //explicitely release slices to prevent leak (since the hold a back reference to the volume)
-                obj3d.current.volume.sliceList.length = 0;
-            }
-
-
             //reset ThreeJS object references, except renderers which are conserved
             obj3d.current = {
                 renderer: obj3d.current.renderer,
@@ -250,7 +456,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
             };
 
 
-            revokeObjectURLs();
 
             const manager = new THREE.LoadingManager();
             //url modifier to allow manager to read already loaded file 
@@ -262,86 +467,21 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 return url;
             });
 
-
             if (volRendererContainer.current) {
 
-                const renderer = obj3d.current.renderer;
-                const volRendCont = volRendererContainer.current;
-                const aspect = volRendCont.offsetWidth / volRendCont.offsetHeight;
-
-                const h = 512; // frustum height
-                const camera = new THREE.OrthographicCamera(- h * aspect / 2, h * aspect / 2, h / 2, - h / 2, 1, 1000);
-
-                obj3d.current.camera = camera;
-
-                //main scene
-                const scene = new THREE.Scene();
-                scene.add(camera);
-                obj3d.current.scene = scene;
-
-                // light
-                const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
-                scene.add(hemiLight);
-
-                /*
-                const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-                dirLight.position.set(200, 200, 200);
-                scene.add(dirLight);
-                */
+                initSceneBeforeVolumeLoad();
 
                 const niftiloadr = new NIfTILoader(manager);
-
                 //use already selected & loaded file 
                 const filename = SELECTED_FILE_FAKEURL;
 
                 niftiloadr.load(filename,
                     function onload(volume) {
                         if (volume) {
-                            obj3d.current.volume = volume;
-
-                            initVol3D(scene, volume, true);
-                            initSlices(scene, volume);
-
-                            const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
-                            const mboxZLen = mriBbox.max.toArray()[2];
-                            const camDistance = 6 * mboxZLen;
-                            camera.position.z = camDistance;
-                            rtState.current.camDistance = camDistance;
-                            camera.getWorldQuaternion(rtState.current.stopQ);
-
-                            initBrainWire(scene, mriBbox.max.toArray(), false);
-                            setBrainWireFrame(typeof clipWire == 'undefined');
-
-                            //group for landmarks
-                            obj3d.current.marksGroup = new THREE.Group();
-                            scene.add(obj3d.current.marksGroup);
-
-                            const controls = new ArcballControls(camera, renderer.domElement, scene);
-
-                            controls.addEventListener('change', (e) => {
-
-                                //keep the brain wireframe in sync with camera rotation to make it look like it's static
-                                updateBrainWireRotation();
-
-                                //show Volume's bounding-box while rotating
-                                if (!rtState.current.showVol3D) {
-                                    obj3d.current.boxAninAction.stop();
-                                    obj3d.current.boxAninAction.play();
-                                }
-
-                                renderAll();
-
-                            });
-                            obj3d.current.controls = controls;
-
-                            controls.minDistance = 50;
-                            controls.maxDistance = 500;
-                            controls.enablePan = false;
-
+                            initSceneOnVolumeLoaded(volume);
                         }
 
-                        revokeObjectURLs();
-                        setDisplayVol3DOrSlice(true);
+                        setViewMode(StAtm.ViewMode.Volume3D);
                         setIsLoading(false);
                     },
                     function onProgress(request: ProgressEvent) {
@@ -359,18 +499,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     },
 
                 );
-
-
-
-
-                //---------------------------------------------------------------------
-                // second renderer in an inset to display main view axis orientation 
-                const { insetScene: scene2, insetCamera: camera2 } = setupInset(obj3d.current.aspect2, obj3d.current.camera);
-                obj3d.current.camera2 = camera2;
-                obj3d.current.scene2 = scene2;
-
-                //---------------------------------------------------------------------
+                initSceneAfterVolumeLoaded();
             }
+            objectURLs.current.forEach((url) => URL.revokeObjectURL(url));
+
         }
 
 
@@ -410,7 +542,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             renderer.setPixelRatio(window.devicePixelRatio);
             volRendCont.appendChild(renderer.domElement);
 
-            renderer.localClippingEnabled = (typeof clipWire != 'undefined');
+            renderer.localClippingEnabled = (clipWire != StAtm.ClipWireMode.None);
             obj3d.current.renderer = renderer;
 
             /*
@@ -475,8 +607,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
         obj3d.current.sliceZ?.dispose();
         obj3d.current.controls?.dispose();
 
+
         LandmarksManager.dispose(obj3d.current.marksGroup);
 
+        //obj3d.current.cube
         obj3d.current.disposable.forEach(d => d.dispose());
     };
 
@@ -513,6 +647,19 @@ const VolumePreview = (props: VolumePreviewProps) => {
         }
     }
 
+    const onCameraChanged = () => {
+
+        //keep the brain wireframe in sync with camera rotation to make it look like it's static
+        updateBrainWireRotation();
+
+        //show Volume's bounding-box while rotating
+        if (StAtm.ViewMode.Volume3D != rtState.current.viewMode) {
+            obj3d.current.boxAninAction.stop();
+            obj3d.current.boxAninAction.play();
+        }
+        renderAll();
+    };
+    //-------------------------------------------------------------------------
     //-------------------------------------------------------------------------
     const initVol3D = (scene: THREE.Scene, volume: Volume, initVisibility: boolean) => {
         // Colormap texture
@@ -536,7 +683,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
         const valSpan = volume.max - volume.min;
         uniforms['u_clim'].value.set(volume.min + valSpan * .2, volume.min + valSpan * .5);
         setClims([volume.min + valSpan * .2, volume.min + valSpan * .5]);
-        uniforms['u_renderstyle'].value = castIso ? 1 : 0; // 0: MIP, 1: ISO
+        uniforms['u_renderstyle'].value = 1; // 0: MIP, 1: ISO
+        setCastIso(true);
         uniforms['u_renderthreshold'].value = volume.min + valSpan * .15; // For ISO renderstyle
         setIsothreshold(volume.min + valSpan * .15);
         uniforms['u_cmdata'].value = cm_viridis;
@@ -571,26 +719,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         obj3d.current.disposable.push(geometry, material, texture, cm_viridis);
     }
-
-    const setDisplayVol3DOrSlice = (showVol3D: boolean) => {
-        if (obj3d.current.vol3D) {
-
-            if (showVol3D) {
-                obj3d.current.vol3D.visible = showVol3D;
-
-                obj3d.current.sliceX.mesh.visible = false;
-                obj3d.current.sliceY.mesh.visible = false;
-                obj3d.current.sliceZ.mesh.visible = false;
-            } else {
-                obj3d.current.vol3D.visible = showVol3D;
-
-                obj3d.current.sliceX.mesh.visible = showXSlice;
-                obj3d.current.sliceY.mesh.visible = showYSlice;
-                obj3d.current.sliceZ.mesh.visible = showZSlice;
-            }
-        }
-
-    };
 
     const initSlices = (scene: THREE.Scene, volume: Volume) => {
 
@@ -721,18 +849,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         });
     };
 
-
-    const setBrainWireFrame = (wireframe: boolean) => {
-        if (obj3d.current.brainWire) {
-            obj3d.current.brainWire.traverse(function (child) {
-                if (child.isMesh) {
-                    child.material.wireframe = wireframe;
-                }
-            });
-        }
-    };
-
-    const refreshClippingPlanes = (clipWire: string | undefined) => {
+    const refreshClippingPlanes = (clipWire: StAtm.ClipWireMode) => {
 
         if (clipWire) {
             const planeNorms: THREE.Vector3[] = [];
@@ -740,19 +857,19 @@ const VolumePreview = (props: VolumePreviewProps) => {
             let pos: number = NaN;
 
             switch (clipWire) {
-                case 'x':
+                case StAtm.ClipWireMode.ClipX:
                     planeNorms.push(new THREE.Vector3(-1, 0, 0));
                     planeNorms.push(new THREE.Vector3(1, 0, 0));
                     slice = obj3d.current.sliceX;
                     pos = slice.mesh.matrix.elements[12];
                     break;
-                case 'y':
+                case StAtm.ClipWireMode.ClipY:
                     planeNorms.push(new THREE.Vector3(0, -1, 0));
                     planeNorms.push(new THREE.Vector3(0, 1, 0));
                     slice = obj3d.current.sliceY;
                     pos = slice.mesh.matrix.elements[13];
                     break;
-                case 'z':
+                case StAtm.ClipWireMode.ClipZ:
                     planeNorms.push(new THREE.Vector3(0, 0, -1));
                     planeNorms.push(new THREE.Vector3(0, 0, 1));
                     slice = obj3d.current.sliceZ;
@@ -782,6 +899,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
         }
     };
 
+    //-------------------------------------------------------------------------
+
+
     const getRotationOffset = () => {
         //current camera rotation
         const camQ = new THREE.Quaternion();
@@ -802,45 +922,88 @@ const VolumePreview = (props: VolumePreviewProps) => {
     };
 
     const updateBrainWireRotation = (force: boolean = false) => {
-        if (rtState.current.fixedWire || force) {
+        if (obj3d.current.brainWire) {
+            if (rtState.current.fixedWire || force) {
 
-            obj3d.current.brainWire.up.copy(obj3d.current.camera.up);
-            const rotOffset = getBWRotationOffset();
-            obj3d.current.brainWire.setRotationFromQuaternion(rotOffset);
+                obj3d.current.brainWire.up.copy(obj3d.current.camera.up);
+                const rotOffset = getBWRotationOffset();
+                obj3d.current.brainWire.setRotationFromQuaternion(rotOffset);
+            }
+            setDeltaRotation(
+                obj3d.current.brainWire.rotation.toArray() as [number, number, number]
+            );
         }
-        setDeltaRotation(
-            obj3d.current.brainWire.rotation.toArray()
-        );
 
     };
 
-    const setCameraRotation = (up: number[], position: number[]) => {
-        obj3d.current.controls.reset();
-        obj3d.current.camera.up.fromArray(up);
-        obj3d.current.camera.position.fromArray(position);
-        obj3d.current.camera.lookAt(0, 0, 0);
+    const initSceneBeforeVolumeLoad = () => {
+        const renderer = obj3d.current.renderer;
+        const volRendCont = volRendererContainer.current;
+        const aspect = volRendCont.offsetWidth / volRendCont.offsetHeight;
 
+        /*
+            const camera = new THREE.PerspectiveCamera(60, aspect, 0.01, 1e10);
+        */
+
+        const h = 512; // frustum height
+        const camera = new THREE.OrthographicCamera(- h * aspect / 2, h * aspect / 2, h / 2, - h / 2, 1, 1000);
+
+        obj3d.current.camera = camera;
+
+        //main scene
+        const scene = new THREE.Scene();
+        scene.add(camera);
+        obj3d.current.scene = scene;
+
+        // light
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
+        scene.add(hemiLight);
         updateBrainWireRotation();
         updateInset();
+
     };
 
-    //-------------------------------------------------------------------------
-    const setClipWireBySlice = (newClipWire: string, enableClipping: boolean) => {
-        if (enableClipping) {
-            //enabling wireframe clipping
-            setClipWire(newClipWire);
-            setBrainWireFrame(false);
-            refreshClippingPlanes(newClipWire);
-            obj3d.current.renderer.localClippingEnabled = true;
-        } else {
-            //disabling wireframe clipping
-            setClipWire(undefined);
-            setBrainWireFrame(true);
-            obj3d.current.renderer.localClippingEnabled = false;
-        }
+    const initSceneOnVolumeLoaded = (volume: Volume) => {
+
+        obj3d.current.volume = volume;
+
+        initVol3D(obj3d.current.scene, volume, true);
+        initSlices(obj3d.current.scene, volume);
+
+        const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
+        const mboxZLen = mriBbox.max.toArray()[2];
+        const camDistance = 6 * mboxZLen;
+        obj3d.current.camera.position.z = camDistance;
+        rtState.current.camDistance = camDistance;
+        obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
+
+        initBrainWire(obj3d.current.scene, mriBbox.max.toArray(), false);
+        setBrainModelMode(clipWire === StAtm.ClipWireMode.None ? StAtm.BrainModelMode.Wire : StAtm.BrainModelMode.Clipped);
+
+        //group for landmarks
+        obj3d.current.marksGroup = new THREE.Group();
+        obj3d.current.scene.add(obj3d.current.marksGroup);
+
+        const controls = new ArcballControls(obj3d.current.camera, obj3d.current.renderer.domElement, obj3d.current.scene);
+
+        controls.addEventListener('change', onCameraChanged);
+        obj3d.current.controls = controls;
+
+        controls.minDistance = 50;
+        controls.maxDistance = 500;
+        controls.enablePan = false;
+
     };
 
+    const initSceneAfterVolumeLoaded = () => {
 
+        // second renderer in an inset to display main view axis orientation 
+        const { insetScene: scene2, insetCamera: camera2 } = setupInset(obj3d.current.aspect2, obj3d.current.camera);
+        obj3d.current.camera2 = camera2;
+        obj3d.current.scene2 = scene2;
+
+    };
+    //---------------------------------------------------------------------
     const setShowSlice = (slice: string, newShowSlice: boolean) => {
         switch (slice) {
             case 'x':
@@ -975,7 +1138,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                         (
                                             (nextLandmarkId != '')
                                                 ?
-                                                { color: landmarksColors.get(nextLandmarkId) } as CreateLandMarkOptions
+                                                { color: knownLandMarks.get(nextLandmarkId)?.color } as CreateLandMarkOptions
                                                 :
                                                 undefined
                                         ),
@@ -1039,7 +1202,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 }}
                             >
                                 <LandMarksList
-                                    landmarkset={MarmosetLandMarks}
+                                    landmarkset={knownLandMarksAry}
                                     highlighted={highMarks}
                                     marked={new Set(markInstances.keys())}
                                     onSetNextLandmarkId={(landmarkId) => setNextLandmarkId(landmarkId)}
@@ -1072,507 +1235,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     </div>
                 </ResizeSensor2>
 
-                <div
-                    style={{
-                        backgroundColor: "#EEE",
-                        padding: 6,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                    }}
-                >
-                    <div>
-
-                        <div
-                            style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
-                        >
-                            <span>Brain wire:</span>
-                            <Switch
-                                checked={showWire}
-                                disabled={!obj3d.current.volume}
-                                label="visible"
-                                onChange={() => {
-                                    setShowWire(!showWire);
-                                    obj3d.current.brainWire.visible = !showWire;
-                                }}
-                            />
-                            <span></span>
-                        </div>
-
-                        <div
-                            style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
-                        >
-                            <span>Brain wire orientation:</span>
-                            <Switch
-                                checked={fixedWire}
-                                disabled={!obj3d.current.volume}
-                                label="fixed"
-                                onChange={() => {
-                                    setFixedWire(!fixedWire);
-
-                                    if (fixedWire) {
-                                        //from now on brainwire will look like it's moving along the camera
-                                        //(but it is actually static)
-
-                                        //camera rotation when stoping updating brainwire rotation
-                                        obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
-
-                                    } else {
-                                        //from now on brainwire will look like it's fixed in its current pos
-                                        //(but it is actually being rotated)
-
-                                        setBrainWireInitRotation(getRotationOffset());
-                                    }
-                                }}
-                            />
-                            <Button icon="reset"
-                                disabled={!obj3d.current.volume}
-
-                                onClick={() => {
-                                    //update directly, rerender will happen before REact UseEffects are processed 
-                                    rtState.current.brainWireInitRotation = new THREE.Quaternion();
-                                    setBrainWireInitRotation(rtState.current.brainWireInitRotation);
-                                    updateBrainWireRotation(true);
-                                }}
-
-                            >Reset</Button>
-                        </div>
-
-                        <div
-                            style={{
-                                marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
-                                display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline"
-                            }}
-                        >
-
-                            <span>Volume orientation :</span>
-                            <Button icon="reset"
-                                disabled={!obj3d.current.volume}
-
-                                onClick={() => {
-                                    if (obj3d.current.controls) {
-                                        obj3d.current.controls.reset();
-                                    }
-                                }}
-
-                            >Reset</Button>
-                        </div>
-
-                        <div
-                            style={{
-
-                                display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline"
-                            }}
-                        >
-
-                            <span>Orientation difference:</span>
-
-                            <>
-                                <span
-                                >{THREE.MathUtils.radToDeg(deltaRotation[0]).toFixed(2) + '°'}</span>
-                                <span
-                                >{THREE.MathUtils.radToDeg(deltaRotation[1]).toFixed(2) + '°'}</span>
-                                <span
-                                >{THREE.MathUtils.radToDeg(deltaRotation[2]).toFixed(2) + '°'}</span>
-                            </>
-                            <span></span>
-                        </div>
-
-                        <div
-                            style={{
-                                marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
-                            }}
-                        >
-                            <Tabs
-                                id="tabs"
-                                selectedTabId={showVol3D ? "tab-volume" : "tab-slice"}
-                                onChange={() => {
-                                    setShowVol3D(!showVol3D);
-                                    setDisplayVol3DOrSlice(!showVol3D);
-                                }}
-                            >
-                                <Tab
-                                    id="tab-volume"
-                                    disabled={!obj3d.current.volume}
-                                    title={<span><Icon icon="cube" /> Volume</span>}
-                                    panel={
-                                        <div>
-                                            <Switch
-                                                checked={castIso}
-                                                disabled={!obj3d.current.volume}
-                                                label="Ray Casting method"
-                                                alignIndicator={Alignment.RIGHT}
-                                                innerLabel="Maximum Intensity Projection"
-                                                innerLabelChecked="ISO"
-                                                onChange={() => {
-                                                    setCastIso(!castIso);
-                                                    obj3d.current.materialVol3D.uniforms['u_renderstyle'].value = castIso ? 0 : 1;
-                                                    renderAll();
-                                                }}
-                                            />
-                                            <span>Render threshold (ISO)</span>
-                                            <Slider
-                                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
-                                                max={obj3d.current.volume ? obj3d.current.volume.max : 1}
-                                                disabled={!obj3d.current.volume || !castIso}
-                                                stepSize={1}
-                                                labelValues={[]}
-                                                showTrackFill={false}
-                                                value={isothreshold}
-                                                onChange={(value: number) => {
-                                                    setIsothreshold(value);
-                                                    obj3d.current.materialVol3D.uniforms['u_renderthreshold'].value = value;
-                                                    renderAll();
-                                                }}
-                                            />
-                                            <span>Colormap boundary 1</span>
-                                            <Slider
-                                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
-                                                max={obj3d.current.volume ? obj3d.current.volume.max : 1}
-                                                disabled={!obj3d.current.volume}
-                                                stepSize={1}
-                                                labelValues={[]}
-                                                showTrackFill={false}
-                                                value={clims[0]}
-                                                onChange={(value: number) => {
-                                                    setClims([value, clims[1]]);
-                                                    obj3d.current.materialVol3D.uniforms['u_clim'].value.set(value, clims[1]);
-                                                    renderAll();
-                                                }}
-                                            />
-                                            <span>Colormap boundary 2</span>
-                                            <Slider
-                                                min={obj3d.current.volume ? obj3d.current.volume.min : 0}
-                                                max={obj3d.current.volume ? obj3d.current.volume.max : 1}
-                                                disabled={!obj3d.current.volume}
-                                                stepSize={1}
-                                                labelValues={[]}
-                                                showTrackFill={false}
-                                                value={clims[1]}
-                                                onChange={(value: number) => {
-                                                    setClims([clims[0], value]);
-                                                    obj3d.current.materialVol3D.uniforms['u_clim'].value.set(clims[0], value);
-                                                    renderAll();
-                                                }}
-                                            />
-
-                                        </div>
-                                    } />
-                                {/*<Tabs.Expander />*/}
-                                <Tab
-                                    id="tab-slice"
-                                    disabled={!obj3d.current.volume}
-                                    title={<span><Icon icon="layers" /> Slices </span>}
-
-                                    panel={
-                                        <>
-                                            <div
-                                            >
-
-
-                                                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
-                                                    <div
-                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                                    >
-
-                                                        <Switch
-                                                            checked={showXSlice}
-                                                            disabled={!obj3d.current.sliceX}
-                                                            label="Sagittal (X) slices"
-                                                            onChange={() => {
-                                                                setShowSlice('x', !showXSlice);
-                                                            }}
-                                                        />
-
-                                                        <Switch
-                                                            checked={clipWire == 'x'}
-                                                            disabled={!obj3d.current.sliceX || !showXSlice}
-                                                            label="clip brainwire"
-                                                            onChange={() => {
-                                                                setClipWireBySlice('x', clipWire != 'x');
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <Slider
-                                                        className="x-slider"
-                                                        min={0}
-                                                        max={obj3d.current.volume ? obj3d.current.volume.dimensions[0] - 1 : 0}
-                                                        disabled={!obj3d.current.sliceX || !showXSlice}
-                                                        labelValues={[]}
-                                                        showTrackFill={false}
-                                                        value={indexX}
-                                                        onChange={(value: number) => {
-
-                                                            setIndexX(value);
-                                                            obj3d.current.sliceX.index = value;
-                                                            obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
-
-                                                            refreshClippingPlanes(clipWire);
-                                                        }}
-                                                    />
-                                                    <div
-                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                                    >
-                                                        <Button
-                                                            disabled={!obj3d.current.volume}
-
-                                                            onClick={() => {
-                                                                setCameraRotation([0, 0, 1], [- rtState.current.camDistance, 0, 0]);
-                                                            }}
-                                                        >L</Button>
-                                                        <Button
-                                                            disabled={!obj3d.current.volume}
-                                                            onClick={() => {
-                                                                setCameraRotation([0, 0, 1], [rtState.current.camDistance, 0, 0]);
-                                                            }}
-                                                        >R</Button>
-
-                                                    </div>
-
-                                                </div>
-                                                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
-                                                    <div
-                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                                    >
-
-                                                        <Switch
-                                                            checked={showYSlice}
-                                                            disabled={!obj3d.current.sliceY}
-                                                            label="Coronal (Y) slices"
-                                                            onChange={() => {
-                                                                setShowSlice('y', !showYSlice);
-                                                            }}
-                                                        />
-
-                                                        <Switch
-                                                            checked={clipWire == 'y'}
-                                                            disabled={!obj3d.current.sliceY || !showYSlice}
-                                                            label="clip brainwire"
-                                                            onChange={() => {
-                                                                setClipWireBySlice('y', clipWire != 'y');
-                                                            }}
-                                                        />
-                                                    </div>
-
-                                                    <Slider
-                                                        className="y-slider"
-                                                        min={0}
-                                                        max={obj3d.current.volume ? obj3d.current.volume.dimensions[1] - 1 : 0}
-                                                        disabled={!obj3d.current.sliceY || !showYSlice}
-                                                        labelValues={[]}
-                                                        showTrackFill={false}
-                                                        value={indexY}
-                                                        onChange={(value: number) => {
-
-                                                            setIndexY(value);
-                                                            obj3d.current.sliceY.index = value;
-                                                            obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
-                                                            refreshClippingPlanes(clipWire);
-                                                        }}
-                                                    />
-
-                                                    <div
-                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                                    >
-                                                        <Button
-                                                            disabled={!obj3d.current.volume}
-
-                                                            onClick={() => {
-                                                                setCameraRotation([0, 0, 1], [0, - rtState.current.camDistance, 0]);
-                                                            }}
-                                                        >P</Button>
-                                                        <Button
-                                                            disabled={!obj3d.current.volume}
-                                                            onClick={() => {
-                                                                setCameraRotation([0, 0, 1], [0, rtState.current.camDistance, 0]);
-                                                            }}
-                                                        >A</Button>
-
-                                                    </div>
-
-                                                </div>
-                                                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
-                                                    <div
-                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                                    >
-
-                                                        <Switch
-                                                            checked={showZSlice}
-                                                            disabled={!obj3d.current.sliceZ}
-                                                            label="Axial (Z) slices"
-                                                            onChange={() => {
-                                                                setShowSlice('z', !showZSlice);
-                                                            }}
-                                                        />
-                                                        <Switch
-                                                            checked={clipWire == 'z'}
-                                                            disabled={!obj3d.current.sliceZ || !showZSlice}
-                                                            label="clip brainwire"
-                                                            onChange={() => {
-                                                                setClipWireBySlice('z', clipWire != 'z');
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <Slider
-                                                        className="z-slider"
-                                                        min={0}
-                                                        max={obj3d.current.volume ? obj3d.current.volume.dimensions[2] - 1 : 0}
-                                                        disabled={!obj3d.current.sliceZ || !showZSlice}
-                                                        labelValues={[]}
-                                                        showTrackFill={false}
-                                                        value={indexZ}
-                                                        onChange={(value: number) => {
-
-                                                            setIndexZ(value);
-                                                            obj3d.current.sliceZ.index = value;
-                                                            obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
-
-                                                            refreshClippingPlanes(clipWire);
-                                                        }}
-                                                    />
-
-                                                    <div
-                                                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                                                    >
-                                                        <Button
-                                                            disabled={!obj3d.current.volume}
-
-                                                            onClick={() => {
-                                                                setCameraRotation([0, 1, 0], [0, 0, - rtState.current.camDistance]);
-                                                            }}
-                                                        >I</Button>
-                                                        <Button
-                                                            disabled={!obj3d.current.volume}
-                                                            onClick={() => {
-                                                                setCameraRotation([0, 1, 0], [0, 0, rtState.current.camDistance]);
-                                                            }}
-                                                        >S</Button>
-
-                                                    </div>
-                                                </div>
-
-                                            </div>
-
-                                            <div
-                                                style={{
-                                                    marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
-                                                    display: 'grid',
-                                                    gridTemplateColumns: '30px 1fr',
-                                                }}>
-                                                <Icon
-                                                    style={
-                                                        (!obj3d.current.volume ? { color: 'rgba(92, 112, 128, 0.2)' } : {})
-                                                    }
-                                                    icon="contrast"
-                                                />
-                                                <RangeSlider
-                                                    disabled={!obj3d.current.volume}
-                                                    min={obj3d.current.volume ? obj3d.current.volume.min : 0}
-                                                    max={obj3d.current.volume ? obj3d.current.volume.max : 100}
-                                                    stepSize={2}
-                                                    labelStepSize={obj3d.current.volume ? obj3d.current.volume.max : 20}
-                                                    onChange={(range: NumberRange) => {
-                                                        obj3d.current.volume.windowLow = range[0];
-                                                        obj3d.current.volume.windowHigh = range[1];
-                                                        obj3d.current.volume.repaintAllSlices();
-                                                        setVolumeRange(range);
-                                                    }}
-                                                    value={volumeRange}
-                                                />
-                                            </div>
-                                        </>
-                                    } />
-                            </Tabs>
-
-                        </div>
-                    </div>
-                    <div>
-                        <div
-                            style={{ marginTop: 20, display: 'flex', flexDirection: 'row', justifyContent: 'space-evenly' }}
-                        >
-
-                            <Button
-                                className="big-button"
-                                icon="confirm"
-                                disabled={!props.volumeFile || (remoteTask && remoteTask.hasStarted())}
-                                onClick={() => {
-                                    const params = { rotation: deltaRotation.slice(0, 3) };
-                                    const task = RegistrationTask.create(
-                                        props.volumeFile?.file,
-                                        params,
-                                        (task) => {
-                                            setRemoteTask(task);
-                                            if (!task) {
-                                                setShowLogs(false);
-                                            }
-                                        },
-                                        (lines: string[]) => setLoglines(lines),
-                                        (iserror, event) => {
-                                            if (iserror) {
-                                                setAlertMessage(
-                                                    <p>
-                                                        Registration aborted!
-                                                    </p>);
-                                                task.taskStatus = 'aborted';
-                                            } else {
-                                                setAlertMessage(
-                                                    <p>
-                                                        Registration done!
-                                                    </p>);
-                                                task.taskStatus = 'done';
-                                            }
-                                            setShowLogs(false);
-                                        },
-
-                                    );
-                                    setRemoteTask(task)
-                                    setShowLogs(true);
-                                }} >Register</Button>
-
-                            <br />
-
-                            <Button
-                                icon="delete"
-                                disabled={!remoteTask || !remoteTask.hasStarted() || remoteTask.hasFinished()}
-                                onClick={() => {
-                                    const updatedTask = remoteTask?.cancel(
-                                        () => {
-                                            setRemoteTask(undefined);
-                                            setShowLogs(false);
-                                        });
-                                    setRemoteTask(updatedTask);
-                                }} >Cancel</Button>
-                            <AnchorButton
-                                icon="archive"
-                                disabled={!remoteTask || !remoteTask.hasFinished()}
-                                href={remoteTask ? remoteTask?.getDownloadResultUrl() : ""}
-                                target="_blank"
-                            >Download</AnchorButton>
-
-                        </div>
-                        <div style={{ height: 10, margin: "4px 6px", padding: "0 10px" }}>
-                            {
-                                remoteTask && !remoteTask.hasFinished()
-                                    ?
-                                    <ProgressBar
-                                        intent={remoteTask.isCanceled() ? Intent.WARNING : (remoteTask.hasStarted() ? Intent.PRIMARY : Intent.NONE)}
-                                    />
-                                    :
-                                    null
-                            }
-                        </div>
-                        <Switch
-                            checked={showLogs}
-                            disabled={!remoteTask || !remoteTask.hasStarted()}
-                            label="show logs"
-                            onChange={() => setShowLogs(!showLogs)}
-                        />
-                    </div>
-
-
-                </div>
-
-
+                <PreviewControls
+                    rtState={rtState}
+                    obj3d={obj3d}
+                />
 
             </div>
 
