@@ -11,22 +11,7 @@ import {
 } from "@blueprintjs/popover2";
 
 import "./LandMarksList.scss";
-
-export type MarkInstance = {
-    landmarkId: string,
-    instanceId: string,
-    coord: number[],
-}
-
-export type LandMark = {
-    id: string,
-    color: string,
-    coord: number[],
-    name: string,
-    longname: string,
-    descr: string,
-};
-
+import { LandMark } from "./LandmarksManager";
 
 type LandMarksListProps = {
     landmarkset: LandMark[],
@@ -36,6 +21,7 @@ type LandMarksListProps = {
     onMarkMouseLeave?: (markId: string) => (void),
     onSetNextLandmarkId?: (markId: string) => (void),
     onLandmarkRemove?: (markId: string) => (void),
+    onLandmarkFocus?: (markId: string) => (void),
 };
 
 const LandMarksList = (props: LandMarksListProps) => {
@@ -106,19 +92,24 @@ const LandMarksList = (props: LandMarksListProps) => {
                                         <span />
                                     }
 
+                                    <Icon
+                                        icon="map-marker"
+                                        style={{ marginTop: 3 }} {...(isSet ? { color: lm.color } : {})}
+                                        onClick={() => props.onLandmarkFocus?.call(null, lm.id)}
+                                    />
+
+                                    <span>{lm.name}</span>
                                     <Tooltip2
                                         content={lm.descr}
                                     >
-                                        <Icon icon="map-marker" style={{ marginTop: 3 }} {...(isSet ? { color: lm.color } : {})} />
+                                        <span>{lm.longname}</span>
                                     </Tooltip2>
-
-                                    <span>{lm.name}</span>
-                                    <span>{lm.longname}</span>
                                     {isSet ? <span title="Delete landmark">
                                         <Icon
                                             icon="small-cross"
                                             color="#FF0000"
-                                            onClick={() => props.onLandmarkRemove?.call(null, lm.id)} />
+                                            onClick={() => props.onLandmarkRemove?.call(null, lm.id)}
+                                        />
                                     </span> : null}
                                 </div>
 

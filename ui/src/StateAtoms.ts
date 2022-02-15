@@ -26,6 +26,7 @@ const MarmosetLandMarks: LandMark[] = [
 
 
 export enum ViewMode {
+    None = 'none',
     Volume3D = 'Volume3D',
     Slice3D = 'Slices3D',
     Slice2D = 'Slices2D',
@@ -43,13 +44,29 @@ export enum ClipWireMode {
     ClipZ = 'z',
 }
     
+export enum CameraPOV {
+    Free,
+    Left,
+    Right,
+    Anterior,
+    Posterior,
+    Superior,
+    Inferior,
+}
+
 
 export const isLoading = atom(false);
+export const volumeLoaded = atom(false);
+
+export const volumeValMin = atom(0.0);
+export const volumeValMax = atom(1.0);
+
 export const viewMode = atom(ViewMode.Slice3D);
 export const alertMessage = atom(undefined as unknown as JSX.Element);
 
 export const deltaRotation = atom([0, 0, 0] as [number, number, number]);
 export const cameraRotation = atom({up: [0, 0, 0] as [number, number, number], position: [0, 0, 0] as [number, number, number]});
+export const cameraPOV = atom(CameraPOV.Superior);
 
 
 export const showBrainModel = atom(false);
@@ -71,6 +88,10 @@ export const volumeRange = atom([0, 0] as [number, number]);
 export const indexX = atom(0);
 export const indexY = atom(0);
 export const indexZ = atom(0);
+
+export const maxIndexX = atom(0);
+export const maxIndexY = atom(0);
+export const maxIndexZ = atom(0);
 
 export const remoteTask = atom(undefined as unknown as RegistrationTask);
 export const showLogs = atom(false);

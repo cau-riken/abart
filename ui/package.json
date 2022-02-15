@@ -39,9 +39,9 @@
   },
   "dependencies": {
     "@blueprintjs/core": "^3.52.0",
-    "@blueprintjs/popover2": "^0.12.9",
+    "@blueprintjs/popover2": "^0.13.0",
     "@react-hook/debounce": "^4.0.0",
-    "axios": "^0.25.0",
+    "axios": "^0.26.0",
     "fflate": "^0.7.3",
     "jotai": "^1.5.3",
     "nifti-reader-js": "^0.5.4",
