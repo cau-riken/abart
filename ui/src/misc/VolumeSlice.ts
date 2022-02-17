@@ -74,7 +74,6 @@ function VolumeSlice( volume, index, axis ) {
 	 */
 	this.mesh = new Mesh( this.geometry, material );
 	this.mesh.matrixAutoUpdate = false;
-	this.mesh.userData = { isSlice:true };
 	/**
 	 * @member {Boolean} geometryNeedsUpdate If set to true, updateGeometry will be triggered at the next repaint
 	 */
@@ -232,7 +231,7 @@ VolumeSlice.prototype = {
 	 * @memberof VolumeSlice
 	 */
 	 dispose: function () {
-		//because Volume & VolumeSlice reference each other, the loop needs to be broken...
+		//because Volume & VolumeSlice reference each other, the circular references loop needs to be broken...
 		this.volume = undefined;
 		if ( this.geometry ) this.geometry.dispose();
 		if ( this.mesh ) {

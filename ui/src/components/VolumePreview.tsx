@@ -64,6 +64,7 @@ const setupInset = (insetAspect: number, camera: THREE.Camera) => {
 
     // camera
     const insetCamera = new THREE.PerspectiveCamera(50, insetAspect, 1, 1000);
+    insetCamera.name = 'inset-cam';
     insetCamera.up = camera.up; // important!
 
     // axes
@@ -74,19 +75,19 @@ const setupInset = (insetAspect: number, camera: THREE.Camera) => {
 
 export type Obj3dRefs = {
 
-    stats: Stats,
+    stats: Stats | undefined,
 
     //main scene (volume 3D & slices in 3D)
-    renderer: THREE.WebGLRenderer,
-    camera: THREE.OrthographicCamera,
-    scene: THREE.Scene,
-    controls: ArcballControls,
+    renderer: THREE.WebGLRenderer | undefined,
+    camera: THREE.OrthographicCamera | undefined,
+    scene: THREE.Scene | undefined,
+    controls: ArcballControls | undefined,
 
     //insets related  
-    renderer2: THREE.Renderer,
+    renderer2: THREE.Renderer | undefined,
     aspect2: number,
-    camera2: THREE.PerspectiveCamera,
-    scene2: THREE.Scene,
+    camera2: THREE.PerspectiveCamera | undefined,
+    scene2: THREE.Scene | undefined,
 
     //for slices rendering
     volume: Volume,
@@ -99,10 +100,10 @@ export type Obj3dRefs = {
     materialVol3D: THREE.ShaderMaterial,
 
     //brain model
-    brainWire: THREE.Group,
+    brainModel: THREE.Group,
 
     //groups for user created landmarks
-    marksGroup: THREE.Group,
+    marksGroup: THREE.Group | undefined,
 
     //volume bounding box 
     cube: THREE.Mesh,
@@ -111,20 +112,20 @@ export type Obj3dRefs = {
     boxAninAction: THREE.AnimationAction,
 
     //standard planes scenes (slices in 2D)
-    rendX: THREE.WebGLRenderer,
-    camX: THREE.OrthographicCamera,
-    //sceneX: THREE.Scene,
-    dragCtrlX: DragControls,
+    rendX: THREE.WebGLRenderer | undefined,
+    camX: THREE.OrthographicCamera | undefined,
+    sliceXCtrl: ArcballControls | undefined,
+    dragCtrlX: DragControls | undefined,
 
-    rendY: THREE.WebGLRenderer,
-    camY: THREE.OrthographicCamera,
-    //sceneY: THREE.Scene,
-    dragCtrlY: DragControls,
+    rendY: THREE.WebGLRenderer | undefined,
+    camY: THREE.OrthographicCamera | undefined,
+    sliceYCtrl: ArcballControls | undefined,
+    dragCtrlY: DragControls | undefined,
 
-    rendZ: THREE.WebGLRenderer,
-    camZ: THREE.OrthographicCamera,
-    //sceneZ: THREE.Scene,
-    dragCtrlZ: DragControls,
+    rendZ: THREE.WebGLRenderer | undefined,
+    camZ: THREE.OrthographicCamera | undefined,
+    sliceZCtrl: ArcballControls | undefined,
+    dragCtrlZ: DragControls | undefined,
 
 
     //others ThreeJS objects which need to be released when undloading volume 
@@ -152,9 +153,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [showBrainModel, setShowBrainModel] = useAtom(StAtm.showBrainModel);
     const [brainModelMode, setBrainModelMode] = useAtom(StAtm.brainModelMode);
 
-    const [clipWire, setClipWire] = useAtom(StAtm.clipWire);
-    const [brainWireInitRotation, setBrainWireInitRotation] = useAtom(StAtm.brainWireInitRotation);
-    const [fixedWire, setFixedWire] = useAtom(StAtm.fixedWire);
+    const [clipBrainModel, setBrainModel] = useAtom(StAtm.clipBrainModel);
+    const [brainModelInitRotation, setBrainModelInitRotation] = useAtom(StAtm.brainModelInitRotation);
+    const [fixedBrainModel, setFixedBrainModel] = useAtom(StAtm.fixedBrainModel);
 
     const [isothreshold, setIsothreshold] = useAtom(StAtm.isothreshold);
     const [clims, setClims] = useAtom(StAtm.clims);
@@ -201,23 +202,26 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const sliceYRendererContainer = React.useRef<HTMLDivElement>();
     const sliceZRendererContainer = React.useRef<HTMLDivElement>();
 
-    const obj3d = React.useRef<Obj3dRefs>({ 
-        disposable: [], 
-        listeners: [] 
+    const obj3d = React.useRef<Obj3dRefs>({
+        disposable: [],
+        listeners: []
     });
 
-    const rtState = React.useRef<StAtm.RealTimeState>({ 
-        normPointer: new THREE.Vector2() 
+    const rtState = React.useRef<StAtm.RealTimeState>({
+        normPointer: new THREE.Vector2()
     });
 
     React.useEffect(() => {
 
         rtState.current = {
             ...rtState.current,
-            fixedWire,
+            fixedBrainModel,
             deltaRotation,
-            brainWireInitRotation,
+            brainModelInitRotation,
             viewMode,
+            indexX,
+            indexY,
+            indexZ,
         };
         renderAll();
 
@@ -236,18 +240,27 @@ const VolumePreview = (props: VolumePreviewProps) => {
             } else {
                 obj3d.current.vol3D.visible = false;
 
-                obj3d.current.sliceX.mesh.visible = showXSlice;
-                obj3d.current.sliceY.mesh.visible = showYSlice;
-                obj3d.current.sliceZ.mesh.visible = showZSlice;
+                //slice object is visible to allow its children being visible,
+                //slice material might be hidden though to hide the slice in Slice3D view.
+
+                obj3d.current.sliceX.mesh.visible = true;
+                obj3d.current.sliceY.mesh.visible = true;
+                obj3d.current.sliceZ.mesh.visible = true;
+
+                obj3d.current.sliceX.mesh.material.visible = showXSlice;
+                obj3d.current.sliceY.mesh.material.visible = showYSlice;
+                obj3d.current.sliceZ.mesh.material.visible = showZSlice;
             }
         }
 
-        //stop animation when rendrering volume (as the shader becomes slow when the animation is processed)
+        //stop animation when rendering volume (as the shader becomes slow when the animation is processed)
         if (StAtm.ViewMode.Volume3D === viewMode && obj3d.current?.boxAninAction) {
             obj3d.current.boxAninAction.stop();
         }
 
         if (viewMode != StAtm.ViewMode.Slice2D) {
+
+            landmarksManager?.showAllMarkBullets();
 
         } else {
 
@@ -263,6 +276,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             if (sliceZRendCont && obj3d.current.rendZ) {
                 obj3d.current.rendZ.setSize(sliceZRendCont.offsetWidth, sliceZRendCont.offsetHeight);
             }
+            landmarksManager?.showMarkBulletsBySlices([0, 1, 2], [indexX, indexY, indexZ]);
         }
 
         handleResize(null);
@@ -281,10 +295,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
     React.useEffect(() => {
 
         const wireframe = brainModelMode === StAtm.BrainModelMode.Wire;
-        if (obj3d.current.brainWire) {
-            obj3d.current.brainWire.traverse(function (child) {
-                if (child.isMesh) {
-                    child.material.wireframe = wireframe;
+        if (obj3d.current.brainModel) {
+            obj3d.current.brainModel.traverse(function (child) {
+                if (child.type == 'Mesh') {
+                    (child as THREE.Mesh).material.wireframe = wireframe;
                 }
             });
         }
@@ -324,11 +338,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
             }
             if (cameraRotation) {
                 obj3d.current.controls.reset();
-                obj3d.current.camera.up.fromArray(cameraRotation.up);
-                obj3d.current.camera.position.fromArray(cameraRotation.position);
-                obj3d.current.camera.lookAt(0, 0, 0);
+                obj3d.current.camera?.up.fromArray(cameraRotation.up);
+                obj3d.current.camera?.position.fromArray(cameraRotation.position);
+                obj3d.current.camera?.lookAt(0, 0, 0);
 
-                updateBrainWireRotation();
+                updateBrainModelRotation();
                 renderAll();
             }
         }
@@ -339,9 +353,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     React.useEffect(() => {
 
         if (obj3d.current.sliceX) {
-            obj3d.current.sliceX.mesh.visible = showXSlice;
-            if (!showXSlice && clipWire === StAtm.ClipWireMode.ClipX) {
-                setClipWire(StAtm.ClipWireMode.None);
+            obj3d.current.sliceX.mesh.material.visible = showXSlice;
+            if (!showXSlice && clipBrainModel === StAtm.ClipBrainModelMode.ClipX) {
+                setBrainModel(StAtm.ClipBrainModelMode.None);
             }
             renderAll();
         }
@@ -351,9 +365,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     React.useEffect(() => {
 
         if (obj3d.current.sliceY) {
-            obj3d.current.sliceY.mesh.visible = showYSlice;
-            if (!showYSlice && clipWire == StAtm.ClipWireMode.ClipY) {
-                setClipWire(StAtm.ClipWireMode.None);
+            obj3d.current.sliceY.mesh.material.visible = showYSlice;
+            if (!showYSlice && clipBrainModel == StAtm.ClipBrainModelMode.ClipY) {
+                setBrainModel(StAtm.ClipBrainModelMode.None);
             }
             renderAll();
         }
@@ -363,9 +377,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     React.useEffect(() => {
 
         if (obj3d.current.sliceZ) {
-            obj3d.current.sliceZ.mesh.visible = showZSlice;
-            if (!showZSlice && clipWire === StAtm.ClipWireMode.ClipZ) {
-                setClipWire(StAtm.ClipWireMode.None);
+            obj3d.current.sliceZ.mesh.material.visible = showZSlice;
+            if (!showZSlice && clipBrainModel === StAtm.ClipBrainModelMode.ClipZ) {
+                setBrainModel(StAtm.ClipBrainModelMode.None);
             }
             renderAll();
         }
@@ -376,15 +390,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
     React.useEffect(() => {
 
         if (obj3d.current.renderer) {
-            if (clipWire != StAtm.ClipWireMode.None) {
-                //wireframe clipping enabled
+            if (clipBrainModel != StAtm.ClipBrainModelMode.None) {
+                //brainModel clipping enabled
 
                 setBrainModelMode(StAtm.BrainModelMode.Clipped);
-                refreshClippingPlanes(clipWire);
+                refreshClippingPlanes(clipBrainModel);
                 obj3d.current.renderer.localClippingEnabled = true;
 
             } else {
-                //wireframe clipping disabled
+                //brainModel clipping disabled
 
                 setBrainModelMode(StAtm.BrainModelMode.Wire);
                 obj3d.current.renderer.localClippingEnabled = false;
@@ -392,7 +406,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             renderAll();
         }
 
-    }, [clipWire]);
+    }, [clipBrainModel]);
 
 
     React.useEffect(() => {
@@ -400,9 +414,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (volumeLoaded && obj3d.current.sliceX) {
             obj3d.current.sliceX.index = indexX;
             obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
-            if (clipWire === StAtm.ClipWireMode.ClipX) {
-                refreshClippingPlanes(clipWire);
+            if (clipBrainModel === StAtm.ClipBrainModelMode.ClipX) {
+                refreshClippingPlanes(clipBrainModel);
             }
+
+            landmarksManager?.showMarkBulletsBySlices([0], [indexX, indexY, indexZ])
+
             renderAll();
         }
 
@@ -414,9 +431,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (volumeLoaded && obj3d.current.sliceY) {
             obj3d.current.sliceY.index = indexY;
             obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
-            if (clipWire === StAtm.ClipWireMode.ClipY) {
-                refreshClippingPlanes(clipWire);
+            if (clipBrainModel === StAtm.ClipBrainModelMode.ClipY) {
+                refreshClippingPlanes(clipBrainModel);
             }
+
+            landmarksManager?.showMarkBulletsBySlices([1], [indexX, indexY, indexZ])
+
             renderAll();
         }
 
@@ -428,9 +448,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (volumeLoaded && obj3d.current.sliceZ) {
             obj3d.current.sliceZ.index = indexZ;
             obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
-            if (clipWire === StAtm.ClipWireMode.ClipZ) {
-                refreshClippingPlanes(clipWire);
+            if (clipBrainModel === StAtm.ClipBrainModelMode.ClipZ) {
+                refreshClippingPlanes(clipBrainModel);
             }
+
+            landmarksManager?.showMarkBulletsBySlices([2], [indexX, indexY, indexZ])
+
             renderAll();
         }
 
@@ -486,8 +509,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     React.useEffect(() => {
 
-        if (volumeLoaded && obj3d.current.brainWire) {
-            obj3d.current.brainWire.visible = showBrainModel;
+        if (volumeLoaded && obj3d.current.brainModel) {
+            obj3d.current.brainModel.visible = showBrainModel;
             renderAll();
         }
 
@@ -495,35 +518,35 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     React.useEffect(() => {
         if (obj3d.current.camera) {
-            if (!fixedWire) {
-                //from now on brainwire will look like it's moving along the camera
+            if (!fixedBrainModel) {
+                //from now on brainModel will look like it's moving along the camera
                 //(but it is actually static)
 
-                //camera rotation when stoping updating brainwire rotation
+                //camera rotation when stoping updating brainModel rotation
                 obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
 
             } else {
-                //from now on brainwire will look like it's fixed in its current pos
+                //from now on brainModel will look like it's fixed in its current pos
                 //(but it is actually being rotated)
 
-                setBrainWireInitRotation(getRotationOffset());
+                setBrainModelInitRotation(getRotationOffset());
             }
             renderAll();
         }
-    }, [fixedWire]);
+    }, [fixedBrainModel]);
 
 
     React.useEffect(() => {
-        updateBrainWireRotation(true);
+        updateBrainModelRotation(true);
         renderAll();
-    }, [brainWireInitRotation]);
+    }, [brainModelInitRotation]);
 
     React.useEffect(() => {
 
-        rtState.current.brainWireInitRotation = brainWireInitRotation;
+        rtState.current.brainBrainModelInitRotation = brainModelInitRotation;
         renderAll();
 
-    }, [brainWireInitRotation]);
+    }, [brainModelInitRotation]);
 
 
     //when Volume changed (as a result of local file selection) 
@@ -539,9 +562,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
         rtState.current.stopQ = new THREE.Quaternion();
 
         setShowBrainModel(false);
-        setClipWire(StAtm.ClipWireMode.None);
-        setBrainWireInitRotation(new THREE.Quaternion());
-        setFixedWire(false);
+        setBrainModel(StAtm.ClipBrainModelMode.None);
+        setBrainModelInitRotation(new THREE.Quaternion());
+        setFixedBrainModel(false);
 
         setIndexX(0);
         setIndexY(0);
@@ -637,6 +660,37 @@ const VolumePreview = (props: VolumePreviewProps) => {
     }, [props.volumeFile]
     );
 
+    const adjustSliceCamOnResize = (
+        renderer: THREE.Renderer | undefined,
+        rendContainer: HTMLDivElement | undefined,
+        camera: THREE.OrthographicCamera | undefined,
+        dimNum: number,
+    ) => {
+        if (renderer && rendContainer && camera) {
+            renderer.setSize(rendContainer.offsetWidth, rendContainer.offsetHeight);
+
+            const sAspect = rendContainer.offsetWidth / rendContainer.offsetHeight;
+            const horiz  = (dimNum === 2) ? 1 : 2;
+            const vert = (dimNum === 0) ? 1 : 0;
+
+            const iLeft = mriBoxMinMax.min[horiz];
+            const iRight = mriBoxMinMax.max[horiz];
+            const iTop = mriBoxMinMax.max[vert];
+            const iBottom = mriBoxMinMax.min[vert];
+            const iWidth = iRight - iLeft;
+            const iHeight = iTop - iBottom;
+            const iAspect = iWidth / iHeight;
+
+            const margin = (iWidth * sAspect / iAspect - iWidth) / 2;
+            
+            camera.left = iLeft - margin;
+            camera.right = iRight + margin;
+            camera.top = iTop;
+            camera.bottom = iBottom;
+            camera.updateProjectionMatrix();
+        }
+    };
+
 
     //handle resize
     const handleResize = (entries?: ResizeEntry[]) => {
@@ -659,25 +713,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 }
             }
         } else {
-            const adjustSliceCamOnResize = (renderer: THREE.Renderer, rendContainer: HTMLDivElement | undefined, camera: THREE.OrthographicCamera) => {
-                if (renderer && rendContainer && camera) {
-                    renderer.setSize(rendContainer.offsetWidth, rendContainer.offsetHeight);
 
-                    const aspect = rendContainer.offsetWidth / rendContainer.offsetHeight;
-                    const mboxZLen = mriBoxMinMax.max[2];
 
-                    const { left, right, top, bottom } = getFrustumPlanes(aspect, mboxZLen * 3);
-                    camera.left = left;
-                    camera.right = right;
-                    camera.top = top;
-                    camera.bottom = bottom;
-                    camera.updateProjectionMatrix();
-                }
-            };
-
-            adjustSliceCamOnResize(obj3d.current.rendX, sliceXRendererContainer.current, obj3d.current.camX);
-            adjustSliceCamOnResize(obj3d.current.rendY, sliceYRendererContainer.current, obj3d.current.camY);
-            adjustSliceCamOnResize(obj3d.current.rendZ, sliceZRendererContainer.current, obj3d.current.camZ);
+            adjustSliceCamOnResize(obj3d.current.rendX, sliceXRendererContainer.current, obj3d.current.camX, 0);
+            adjustSliceCamOnResize(obj3d.current.rendY, sliceYRendererContainer.current, obj3d.current.camY, 1);
+            adjustSliceCamOnResize(obj3d.current.rendZ, sliceZRendererContainer.current, obj3d.current.camZ, 2);
         }
 
         renderAll();
@@ -698,7 +738,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             renderer.setPixelRatio(window.devicePixelRatio);
             volRendCont.appendChild(renderer.domElement);
 
-            renderer.localClippingEnabled = (clipWire != StAtm.ClipWireMode.None);
+            renderer.localClippingEnabled = (clipBrainModel != StAtm.ClipBrainModelMode.None);
             obj3d.current.renderer = renderer;
 
             /*
@@ -749,22 +789,19 @@ const VolumePreview = (props: VolumePreviewProps) => {
         //dispose renderers
         return () => {
             clearBeforeVolumeChange();
-            if (obj3d.current.renderer) {
-                const volRendCont = volRendererContainer.current;
-                if (volRendCont) {
-                    volRendCont.removeChild(obj3d.current.renderer.domElement);
 
-                    if (obj3d.current.stats) {
-                        volRendCont.removeChild(obj3d.current.stats.dom);
-                    }
-                }
+            const removeRendererDom = (domElement: HTMLDivElement | HTMLCanvasElement | undefined, container: HTMLDivElement | undefined) => {
+                domElement && container && container.removeChild(domElement);
             }
-            if (obj3d.current.renderer2) {
-                const insetCont = volRendererInset.current;
-                if (insetCont) {
-                    insetCont.removeChild(obj3d.current.renderer2.domElement);
-                }
-            }
+            removeRendererDom(obj3d.current.renderer?.domElement, volRendererContainer.current);
+            removeRendererDom(obj3d.current.stats?.dom, volRendererContainer.current);
+
+            removeRendererDom(obj3d.current.renderer2?.domElement, volRendererInset.current);
+
+            removeRendererDom(obj3d.current.rendX?.domElement, sliceXRendererContainer.current);
+            removeRendererDom(obj3d.current.rendY?.domElement, sliceYRendererContainer.current);
+            removeRendererDom(obj3d.current.rendZ?.domElement, sliceZRendererContainer.current);
+
             obj3d.current = {};
         }
 
@@ -780,6 +817,13 @@ const VolumePreview = (props: VolumePreviewProps) => {
         obj3d.current.sliceX?.dispose();
         obj3d.current.sliceY?.dispose();
         obj3d.current.sliceZ?.dispose();
+        obj3d.current.sliceXCtrl?.dispose();
+        obj3d.current.sliceYCtrl?.dispose();
+        obj3d.current.sliceZCtrl?.dispose();
+        obj3d.current.dragCtrlX?.dispose();
+        obj3d.current.dragCtrlY?.dispose();
+        obj3d.current.dragCtrlZ?.dispose();
+
         obj3d.current.controls?.dispose();
 
 
@@ -792,47 +836,60 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
     const updateInset = () => {
-        if (obj3d.current.controls) {
+        if (obj3d.current.controls && obj3d.current.camera && obj3d.current.camera2 && obj3d.current.scene2) {
             //copy position of the camera into inset
             obj3d.current.camera2.position.copy(obj3d.current.camera.position);
             obj3d.current.camera2.position.sub(obj3d.current.controls.target);
             obj3d.current.camera2.position.setLength(300);
             obj3d.current.camera2.lookAt(obj3d.current.scene2.position);
 
-            obj3d.current.renderer2.render(obj3d.current.scene2, obj3d.current.camera2);
+            obj3d.current.renderer2?.render(obj3d.current.scene2, obj3d.current.camera2);
         }
     }
 
+    const renderSliceX = function () {
+        if (obj3d.current.rendX && obj3d.current.scene && obj3d.current.camX) {
+            obj3d.current.rendX.render(obj3d.current.scene, obj3d.current.camX);
+        }
+    };
+    const renderSliceY = function () {
+        if (obj3d.current.rendY && obj3d.current.scene && obj3d.current.camY) {
+            obj3d.current.rendY.render(obj3d.current.scene, obj3d.current.camY);
+        }
+    };
+    const renderSliceZ = function () {
+        if (obj3d.current.rendZ && obj3d.current.scene && obj3d.current.camZ) {
+            obj3d.current.rendZ.render(obj3d.current.scene, obj3d.current.camZ);
+        }
+    };
+
     const renderAll = function () {
-        if (viewMode != StAtm.ViewMode.Slice2D) {
-            if (obj3d.current.camera) {
+        if (obj3d.current.scene) {
 
-                updateInset();
-                if (obj3d.current.boxAniMixer) {
-                    const delta = clock.current.getDelta();
-                    obj3d.current.boxAniMixer.update(delta);
-                    //as long as animation isn't finished...
-                    if (obj3d.current.boxAninAction.isRunning()) {
-                        //reiterate another rendering
-                        //(don't need 60FPS for this animation!)
-                        setTimeout(renderAll, 40);
+            if (viewMode != StAtm.ViewMode.Slice2D) {
+                if (obj3d.current.camera) {
+
+                    updateInset();
+                    if (obj3d.current.boxAniMixer) {
+                        const delta = clock.current.getDelta();
+                        obj3d.current.boxAniMixer.update(delta);
+                        //as long as animation isn't finished...
+                        if (obj3d.current.boxAninAction.isRunning()) {
+                            //reiterate another rendering
+                            //(don't need 60FPS for this animation!)
+                            setTimeout(renderAll, 40);
+                        }
                     }
-                }
-                obj3d.current.renderer.render(obj3d.current.scene, obj3d.current.camera);
+                    obj3d.current.renderer?.render(obj3d.current.scene, obj3d.current.camera);
 
+                    obj3d.current.stats?.update();
+                }
+            } else {
+                renderSliceX();
+                renderSliceY();
+                renderSliceZ();
                 obj3d.current.stats?.update();
             }
-        } else {
-            if (obj3d.current.rendX && obj3d.current.camX) {
-                obj3d.current.rendX.render(obj3d.current.scene, obj3d.current.camX);
-            }
-            if (obj3d.current.rendY && obj3d.current.camY) {
-                obj3d.current.rendY.render(obj3d.current.scene, obj3d.current.camY);
-            }
-            if (obj3d.current.rendZ && obj3d.current.camZ) {
-                obj3d.current.rendZ.render(obj3d.current.scene, obj3d.current.camZ);
-            }
-            obj3d.current.stats?.update();
         }
     }
 
@@ -840,8 +897,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         setCameraPOV(StAtm.CameraPOV.Free);
 
-        //keep the brain wireframe in sync with camera rotation to make it look like it's static
-        updateBrainWireRotation();
+        //keep the brainModel in sync with camera rotation to make it look like it's static
+        updateBrainModelRotation();
 
         //show Volume's bounding-box while rotating
         if (StAtm.ViewMode.Volume3D != rtState.current.viewMode) {
@@ -943,10 +1000,20 @@ const VolumePreview = (props: VolumePreviewProps) => {
         //z plane
         const initSliceZ = Math.floor(volume.dimensions[2] / 4);
         const sliceZ = volume.extractSlice('z', initSliceZ);
-        sliceZ.mesh.visible = showZSlice;
+        sliceZ.mesh.material.visible = showZSlice;
         sliceZ.mesh.layers.enable(3);
-        sliceZ.mesh.name = 'sliceZ-mesh';
-        sliceZ.mesh.userData = { isSlice: true, axis: 'z' };
+
+        {
+            sliceZ.mesh.name = 'sliceZ-mesh';
+            sliceZ.mesh.userData = { isSlice: true, axis: 'z' };
+            const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceZ.mesh.geometry),
+                new THREE.LineBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.4 })
+            );
+            border.layers.disable(0);
+            border.layers.enable(1);
+            border.layers.enable(2);
+            sliceZ.mesh.add(border);
+        }
 
         scene.add(sliceZ.mesh);
         obj3d.current.sliceZ = sliceZ;
@@ -956,11 +1023,22 @@ const VolumePreview = (props: VolumePreviewProps) => {
         //y plane
         const initSliceY = Math.floor(volume.dimensions[1] / 2);
         const sliceY = volume.extractSlice('y', initSliceY);
-        sliceY.mesh.name = 'sliceY-mesh';
-        sliceY.mesh.userData = { isSlice: true, axis: 'y' };
-
-        sliceY.mesh.visible = showYSlice;
+        sliceY.mesh.material.visible = showYSlice;
         sliceY.mesh.layers.enable(2);
+
+        {
+            sliceY.mesh.name = 'sliceY-mesh';
+            sliceY.mesh.userData = { isSlice: true, axis: 'y' };
+            const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceY.mesh.geometry),
+                new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 })
+            );
+            border.layers.disable(0);
+            border.layers.enable(1);
+            border.layers.enable(3);
+            sliceY.mesh.add(border);
+        }
+
+
         scene.add(sliceY.mesh);
         obj3d.current.sliceY = sliceY;
         setIndexY(obj3d.current.sliceY.index);
@@ -969,11 +1047,20 @@ const VolumePreview = (props: VolumePreviewProps) => {
         //x plane
         const initSliceX = Math.floor(volume.dimensions[0] / 2);
         const sliceX = volume.extractSlice('x', initSliceX);
-        sliceX.mesh.name = 'sliceX-mesh';
-        sliceX.mesh.userData = { isSlice: true, axis: 'x' };
-
-        sliceX.mesh.visible = showXSlice;
+        sliceX.mesh.material.visible = showXSlice;
         sliceX.mesh.layers.enable(1);
+
+        {
+            sliceX.mesh.name = 'sliceX-mesh';
+            sliceX.mesh.userData = { isSlice: true, axis: 'x' };
+            const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceX.mesh.geometry),
+                new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.4 })
+            );
+            border.layers.disable(0);
+            border.layers.enable(2);
+            border.layers.enable(3);
+            sliceX.mesh.add(border);
+        }
 
         scene.add(sliceX.mesh);
         obj3d.current.sliceX = sliceX;
@@ -990,17 +1077,17 @@ const VolumePreview = (props: VolumePreviewProps) => {
     };
 
 
-    const initBrainWire = (scene: THREE.Scene, bboxMax: number[], initVisibility: boolean) => {
+    const initBrainModel = (scene: THREE.Scene, bboxMax: number[], initVisibility: boolean) => {
 
         const [mboxXLen, mboxYLen, mboxZLen] = bboxMax;
 
         const objloader = new OBJLoader();
-        const wireColor = new THREE.Color(0xFF88FF)
+        const brainModelColor = new THREE.Color(0xFF88FF)
         //objloader.setMaterials(objmaterial);
 
         const clipPlanes: THREE.Plane[] = [];
         const material = new THREE.MeshLambertMaterial({
-            color: wireColor,
+            color: brainModelColor,
             side: THREE.DoubleSide,
             clippingPlanes: clipPlanes,
             clipIntersection: false,
@@ -1012,7 +1099,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             leftHemisphere.traverse(function (child) {
                 if (child.isMesh) {
                     child.material.wireframe = true;
-                    child.material.color = wireColor;
+                    child.material.color = brainModelColor;
                     //child.material.opacity = 0.9;
                     //child.material.transparent = true;
                     child.material.side = THREE.DoubleSide;
@@ -1032,13 +1119,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
             rightHemisphere.applyMatrix4(mirrorMatrix);
 
             //group both hemisphere
-            const brainWire = new THREE.Group();
-            brainWire.add(leftHemisphere);
-            brainWire.add(rightHemisphere);
+            const brainModel = new THREE.Group();
+            brainModel.name = 'brainModel-group';
 
-            //scale brainwire to roughly fit image dimension 
+            brainModel.add(leftHemisphere);
+            brainModel.add(rightHemisphere);
+
+            //scale brainModel to roughly fit image dimension 
             const sf = 0.8;
-            var templBbox = new THREE.Box3().setFromObject(brainWire);
+            var templBbox = new THREE.Box3().setFromObject(brainModel);
 
             const [brainboxXLen, brainboxYLen, brainboxZLen] = templBbox.max.toArray();
             const scaleTemplMatrix = new THREE.Matrix4().set(
@@ -1047,40 +1136,41 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 0, 0, sf * mboxZLen / brainboxZLen, 0,
                 0, 0, 0, 1
             );
-            brainWire.applyMatrix4(scaleTemplMatrix);
-            brainWire.visible = initVisibility;
-            scene.add(brainWire);
-            obj3d.current.brainWire = brainWire;
+            
+            brainModel.applyMatrix4(scaleTemplMatrix);
+            brainModel.visible = initVisibility;
+            scene.add(brainModel);
+            obj3d.current.brainModel = brainModel;
 
 
             const initialQ = new THREE.Quaternion();
-            brainWire.getWorldQuaternion(initialQ);
-            setBrainWireInitRotation(initialQ);
+            brainModel.getWorldQuaternion(initialQ);
+            setBrainModelInitRotation(initialQ);
 
         });
     };
 
-    const refreshClippingPlanes = (clipWire: StAtm.ClipWireMode) => {
+    const refreshClippingPlanes = (clipBrainModel: StAtm.ClipBrainModelMode) => {
 
-        if (clipWire) {
+        if (clipBrainModel) {
             const planeNorms: THREE.Vector3[] = [];
             let slice: VolumeSlice;
             let pos: number = NaN;
 
-            switch (clipWire) {
-                case StAtm.ClipWireMode.ClipX:
+            switch (clipBrainModel) {
+                case StAtm.ClipBrainModelMode.ClipX:
                     planeNorms.push(new THREE.Vector3(-1, 0, 0));
                     planeNorms.push(new THREE.Vector3(1, 0, 0));
                     slice = obj3d.current.sliceX;
                     pos = slice.mesh.matrix.elements[12];
                     break;
-                case StAtm.ClipWireMode.ClipY:
+                case StAtm.ClipBrainModelMode.ClipY:
                     planeNorms.push(new THREE.Vector3(0, -1, 0));
                     planeNorms.push(new THREE.Vector3(0, 1, 0));
                     slice = obj3d.current.sliceY;
                     pos = slice.mesh.matrix.elements[13];
                     break;
-                case StAtm.ClipWireMode.ClipZ:
+                case StAtm.ClipBrainModelMode.ClipZ:
                     planeNorms.push(new THREE.Vector3(0, 0, -1));
                     planeNorms.push(new THREE.Vector3(0, 0, 1));
                     slice = obj3d.current.sliceZ;
@@ -1101,7 +1191,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 );
 
 
-                obj3d.current.brainWire.traverse(function (child) {
+                obj3d.current.brainModel.traverse(function (child) {
                     if (child.isMesh) {
                         child.material.clippingPlanes = clipPlanes;
                     }
@@ -1116,32 +1206,40 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const getRotationOffset = () => {
         //current camera rotation
         const camQ = new THREE.Quaternion();
-        obj3d.current.camera.getWorldQuaternion(camQ);
+        if (obj3d.current.camera) {
+            obj3d.current.camera.getWorldQuaternion(camQ);
 
-        //last updated brainwire rotation 
-        const initQ = new THREE.Quaternion().copy(rtState.current.brainWireInitRotation)
+            //last updated brainModel rotation 
+            const initQ = new THREE.Quaternion().copy(rtState.current.brainModelInitRotation)
 
-        const updatedQ = camQ.invert().multiply(rtState.current.stopQ).multiply(initQ);
-        return updatedQ;
+            const updatedQ = camQ.invert().multiply(rtState.current.stopQ).multiply(initQ);
+            return updatedQ;
+        } else {
+            return camQ;
+        }
     };
 
     const getBWRotationOffset = () => {
-        //concatenate initial rotation of brainwire to camera rotation
+        //concatenate initial rotation of brainModel to camera rotation
         const camQ = new THREE.Quaternion();
-        obj3d.current.camera.getWorldQuaternion(camQ);
-        return camQ.multiply(rtState.current.brainWireInitRotation);
+        if (obj3d.current.camera) {
+            obj3d.current.camera.getWorldQuaternion(camQ);
+            return camQ.multiply(rtState.current.brainModelInitRotation);
+        } else {
+            return camQ;
+        }
     };
 
-    const updateBrainWireRotation = (force: boolean = false) => {
-        if (obj3d.current.brainWire) {
-            if (rtState.current.fixedWire || force) {
+    const updateBrainModelRotation = (force: boolean = false) => {
+        if (obj3d.current.brainModel && obj3d.current.camera) {
+            if (rtState.current.fixedBrainModel || force) {
 
-                obj3d.current.brainWire.up.copy(obj3d.current.camera.up);
+                obj3d.current.brainModel.up.copy(obj3d.current.camera.up);
                 const rotOffset = getBWRotationOffset();
-                obj3d.current.brainWire.setRotationFromQuaternion(rotOffset);
+                obj3d.current.brainModel.setRotationFromQuaternion(rotOffset);
             }
             setDeltaRotation(
-                obj3d.current.brainWire.rotation.toArray() as [number, number, number]
+                obj3d.current.brainModel.rotation.toArray() as [number, number, number]
             );
         }
 
@@ -1158,119 +1256,171 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const initSceneBeforeVolumeLoad = () => {
         const volRendCont = volRendererContainer.current;
-        const aspect = volRendCont.offsetWidth / volRendCont.offsetHeight;
+        if (volRendCont) {
+            const aspect = volRendCont.offsetWidth / volRendCont.offsetHeight;
 
-        const { left, right, top, bottom } = getFrustumPlanes(aspect);
-        const camera = new THREE.OrthographicCamera(left, right, top, bottom, 1, 1000);
+            const { left, right, top, bottom } = getFrustumPlanes(aspect);
+            const camera = new THREE.OrthographicCamera(left, right, top, bottom, 1, 1000);
+            camera.name = 'main-cam';
 
-        obj3d.current.camera = camera;
+            obj3d.current.camera = camera;
 
-        //main scene
-        const scene = new THREE.Scene();
-        scene.add(camera);
-        obj3d.current.scene = scene;
+            //main scene
+            const scene = new THREE.Scene();
+            scene.add(camera);
+            obj3d.current.scene = scene;
 
-        // light
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
-        scene.add(hemiLight);
+            // light
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
+            scene.add(hemiLight);
+
+
+        }
 
     };
 
     const initSceneOnVolumeLoaded = (volume: Volume) => {
 
-        obj3d.current.volume = volume;
+        if (obj3d.current.renderer && obj3d.current.scene && obj3d.current.camera
+            && sliceXRendererContainer.current && sliceYRendererContainer.current && sliceZRendererContainer.current) {
+            obj3d.current.volume = volume;
 
-        initVol3D(obj3d.current.scene, volume, true);
-        initSlices(obj3d.current.scene, volume);
+            initVol3D(obj3d.current.scene, volume, true);
+            initSlices(obj3d.current.scene, volume);
 
-        const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
-        const mriBoxMinMax = { min: mriBbox.min.toArray(), max: mriBbox.max.toArray() };
-        setMRIBoxMinMax(mriBoxMinMax);
+            const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
+            const mriBoxMinMax = { min: mriBbox.min.toArray(), max: mriBbox.max.toArray() };
+            setMRIBoxMinMax(mriBoxMinMax);
 
-        const mboxZLen = mriBoxMinMax.max[2];
-        const camDistance = 6 * mboxZLen;
-        obj3d.current.camera.position.z = camDistance;
-        rtState.current.camDistance = camDistance;
-        obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
+            const mboxZLen = mriBoxMinMax.max[2];
+            const camDistance = 6 * mboxZLen;
+            obj3d.current.camera.position.z = camDistance;
+            rtState.current.camDistance = camDistance;
+            obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
 
 
-        //group for landmarks
-        obj3d.current.marksGroup = new THREE.Group();
-        obj3d.current.scene.add(obj3d.current.marksGroup);
+            //group for landmarks
+            obj3d.current.marksGroup = new THREE.Group();
+            obj3d.current.marksGroup.name = 'marks-group'
+            obj3d.current.scene.add(obj3d.current.marksGroup);
 
-        const createSliceCamera = (rendContainer: HTMLDivElement | undefined, layer: number, near: number) => {
-            let camera: THREE.OrthographicCamera | undefined;
-            if (rendContainer) {
-                const aspect = rendContainer.offsetWidth / rendContainer.offsetHeight;
-                const { left, right, top, bottom } = getFrustumPlanes(aspect, near);
-                camera = new THREE.OrthographicCamera(left, right, top, bottom, near, 1000);
-                camera.layers.set(layer);
-                obj3d.current.scene.add(camera);
+            //-- controls for 2D slice view : Pan & Zoom ----------------------
+            const sliceXCamDistance = mriBoxMinMax.max[0] - mriBoxMinMax.min[0];
+            obj3d.current.camX = new THREE.OrthographicCamera();
+            obj3d.current.camX.layers.set(1);
+            obj3d.current.camX.name = 'viewX-cam';
+            obj3d.current.scene.add(obj3d.current.camX);
+
+            obj3d.current.camX.up.fromArray([0, 0, 1]);
+            obj3d.current.camX.position.fromArray([- sliceXCamDistance, 0, 0]);
+            obj3d.current.camX.lookAt(0, 0, 0);
+
+            const sliceYCamDistance = mriBoxMinMax.max[1] - mriBoxMinMax.min[1];
+            obj3d.current.camY = new THREE.OrthographicCamera();
+            obj3d.current.camY.layers.set(2);
+            obj3d.current.camY.name = 'viewY-cam';
+            obj3d.current.scene.add(obj3d.current.camY);
+
+            obj3d.current.camY.up.fromArray([0, 0, 1]);
+            obj3d.current.camY.position.fromArray([0, sliceYCamDistance, 0, 0]);
+            obj3d.current.camY.lookAt(0, 0, 0);
+
+            const sliceZCamDistance = mriBoxMinMax.max[2] - mriBoxMinMax.min[2];
+            obj3d.current.camZ = new THREE.OrthographicCamera();
+            obj3d.current.camZ.layers.set(3);
+            obj3d.current.camZ.name = 'viewZ-cam';
+            obj3d.current.scene.add(obj3d.current.camZ);
+
+            obj3d.current.camZ.up.fromArray([0, 1, 0]);
+            obj3d.current.camZ.position.fromArray([0, 0, sliceZCamDistance]);
+            obj3d.current.camZ.lookAt(0, 0, 0);
+            //-----------------------------------------------------------------
+
+
+            const landmarksManager = new LandmarksManager(
+                obj3d.current.marksGroup, {
+                maxIndexX: volume.dimensions[0] - 1,
+                maxIndexY: volume.dimensions[1] - 1,
+                maxIndexZ: volume.dimensions[2] - 1
+            });
+            setLandmarksManager(landmarksManager);
+
+
+            //-- controls for 2D slice view : Pan & Zoom ----------------------
+            if (obj3d.current.rendX) {
+                const sliceCtrl = new ArcballControls(obj3d.current.camX, obj3d.current.rendX.domElement);
+                sliceCtrl.enableRotate = false;
+                sliceCtrl.addEventListener('change', renderSliceX);
+                obj3d.current.listeners.push({ event: 'change', listener: renderSliceX, dispatcher: sliceCtrl });
+                obj3d.current.sliceXCtrl = sliceCtrl;
             }
-            return camera;
-        };
+            if (obj3d.current.rendY) {
+                const sliceCtrl = new ArcballControls(obj3d.current.camY, obj3d.current.rendY.domElement);
+                sliceCtrl.enableRotate = false;
+                sliceCtrl.addEventListener('change', renderSliceY);
+                obj3d.current.listeners.push({ event: 'change', listener: renderSliceY, dispatcher: sliceCtrl });
+                obj3d.current.sliceYCtrl = sliceCtrl;
+            }
+            if (obj3d.current.rendZ) {
+                const sliceCtrl = new ArcballControls(obj3d.current.camZ, obj3d.current.rendZ.domElement);
+                sliceCtrl.enableRotate = false;
+                sliceCtrl.addEventListener('change', renderSliceZ);
+                obj3d.current.listeners.push({ event: 'change', listener: renderSliceZ, dispatcher: sliceCtrl });
+                obj3d.current.sliceZCtrl = sliceCtrl;
+            }
+            //-----------------------------------------------------------------
 
-        const sliceXCamDistance = mriBoxMinMax.max[0] - mriBoxMinMax.min[0];
-        obj3d.current.camX = createSliceCamera(sliceXRendererContainer.current, 1, - sliceXCamDistance);
-        //obj3d.current.camX.position.x = sliceCamDistance;
-        obj3d.current.camX.up.fromArray([0, 0, 1]);
-        obj3d.current.camX.position.fromArray([- sliceXCamDistance, 0, 0]);
-        obj3d.current.camX.lookAt(0, 0, 0);
+            //-- controls for 2D slice view : DnD of landmarks ----------------
 
-        const sliceYCamDistance = mriBoxMinMax.max[1] - mriBoxMinMax.min[1];
-        obj3d.current.camY = createSliceCamera(sliceYRendererContainer.current, 2, - sliceYCamDistance);
-        // obj3d.current.camY.position.y = sliceCamDistance;
-        obj3d.current.camY.up.fromArray([0, 0, 1]);
-        obj3d.current.camY.position.fromArray([0, sliceYCamDistance, 0, 0]);
-        obj3d.current.camY.lookAt(0, 0, 0);
+            //prevent panning when a landmark is dragged
+            const onDragStart = (panControl: ArcballControls) => panControl.enabled = false;
 
-        const sliceZCamDistance = mriBoxMinMax.max[2] - mriBoxMinMax.min[2];
-        obj3d.current.camZ = createSliceCamera(sliceZRendererContainer.current, 3, - sliceZCamDistance);
-        //obj3d.current.camZ.position.z = sliceCamDistance;
-        obj3d.current.camZ.up.fromArray([0, 1, 0]);
-        obj3d.current.camZ.position.fromArray([0, 0, sliceZCamDistance]);
-        obj3d.current.camZ.lookAt(0, 0, 0);
+            const onMarkDragEnd = (event: THREE.Event, panControl: ArcballControls) => {
+                //apply drag move to corresponding landmark
+                landmarksManager.relocateMarkObj(event.object);
+                landmarksManager.showMarkBulletsBySlices([0, 1, 2], [rtState.current.indexX, rtState.current.indexY, rtState.current.indexZ]);
+                //rerset highlighted landmarks
+                setHighMarks([]);
+                //reanable paning
+                panControl.enabled = true;
+                renderAll();
+            }
+            const attachDragListeners = (dispatcher: EventDispatcher, panControl: ArcballControls) => {
+                let listener: (e: THREE.Event) => void;
 
+                listener = () => onDragStart(panControl);
+                dispatcher.addEventListener('dragstart', listener);
+                obj3d.current.listeners.push({ event: 'dragstart', listener, dispatcher });
+                dispatcher.addEventListener('drag', renderAll);
+                obj3d.current.listeners.push({ event: 'drag', listener: renderAll, dispatcher });
+                listener = (e: THREE.Event) => onMarkDragEnd(e, panControl);
+                dispatcher.addEventListener('dragend', listener);
+                obj3d.current.listeners.push({ event: 'dragend', listener: onMarkDragEnd, dispatcher });
+            }
 
-        const landmarksManager = new LandmarksManager(
-            obj3d.current.marksGroup, {
-            maxIndexX: volume.dimensions[0] - 1,
-            maxIndexY: volume.dimensions[1] - 1,
-            maxIndexZ: volume.dimensions[2] - 1
-        });
-        setLandmarksManager(landmarksManager);
+            obj3d.current.dragCtrlX = new DragControls([], obj3d.current.camX, sliceXRendererContainer.current);
+            obj3d.current.sliceXCtrl && attachDragListeners(obj3d.current.dragCtrlX, obj3d.current.sliceXCtrl);
+            obj3d.current.dragCtrlY = new DragControls([], obj3d.current.camY, sliceYRendererContainer.current);
+            obj3d.current.sliceYCtrl && attachDragListeners(obj3d.current.dragCtrlY, obj3d.current.sliceYCtrl);
+            obj3d.current.dragCtrlZ = new DragControls([], obj3d.current.camZ, sliceZRendererContainer.current);
+            obj3d.current.sliceZCtrl && attachDragListeners(obj3d.current.dragCtrlZ, obj3d.current.sliceZCtrl);
+            //-----------------------------------------------------------------
 
-        const onMarkDragEnd = (event: THREE.Event) => {
-            landmarksManager.relocateMarkObj(event.object);
-            setHighMarks([]);
+            initBrainModel(obj3d.current.scene, mriBbox.max.toArray(), false);
+            setBrainModelMode(clipBrainModel === StAtm.ClipBrainModelMode.None ? StAtm.BrainModelMode.Wire : StAtm.BrainModelMode.Clipped);
+
+            //-- controls for main view
+            const controls = new ArcballControls(obj3d.current.camera, obj3d.current.renderer.domElement, obj3d.current.scene);
+
+            controls.addEventListener('change', onCameraChanged);
+            obj3d.current.listeners.push({ event: 'change', listener: onCameraChanged, dispatcher: controls });
+
+            obj3d.current.controls = controls;
+
+            controls.minDistance = 50;
+            controls.maxDistance = 500;
+            controls.enablePan = false;
         }
-        const attachDragListeners = (dispatcher: EventDispatcher) => {
-            dispatcher.addEventListener('drag', renderAll);
-            obj3d.current.listeners.push({ event: 'drag', listener: renderAll, dispatcher });
-            dispatcher.addEventListener('dragend', onMarkDragEnd);
-            obj3d.current.listeners.push({ event: 'dragend', listener: onMarkDragEnd, dispatcher: dispatcher });
-        }
-        obj3d.current.dragCtrlX = new DragControls([], obj3d.current.camX, sliceXRendererContainer.current);
-        attachDragListeners(obj3d.current.dragCtrlX);
-        obj3d.current.dragCtrlY = new DragControls([], obj3d.current.camY, sliceYRendererContainer.current);
-        attachDragListeners(obj3d.current.dragCtrlY);
-        obj3d.current.dragCtrlZ = new DragControls([], obj3d.current.camZ, sliceZRendererContainer.current);
-        attachDragListeners(obj3d.current.dragCtrlZ);
-
-        initBrainWire(obj3d.current.scene, mriBbox.max.toArray(), false);
-        setBrainModelMode(clipWire === StAtm.ClipWireMode.None ? StAtm.BrainModelMode.Wire : StAtm.BrainModelMode.Clipped);
-
-        const controls = new ArcballControls(obj3d.current.camera, obj3d.current.renderer.domElement, obj3d.current.scene);
-
-        controls.addEventListener('change', onCameraChanged);
-        obj3d.current.listeners.push({ event: 'change', listener: onCameraChanged, dispatcher: controls });
-
-        obj3d.current.controls = controls;
-
-        controls.minDistance = 50;
-        controls.maxDistance = 500;
-        controls.enablePan = false;
-
     };
 
     const initSceneAfterVolumeLoaded = () => {
@@ -1292,31 +1442,41 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const onRendererClick = (
         event: React.MouseEvent<HTMLDivElement, MouseEvent>,
         container: HTMLDivElement,
-        camera: THREE.OrthographicCamera,
+        camera: THREE.OrthographicCamera | undefined,
+        layerChannel: number | undefined = undefined,
     ) => {
-        if (landmarksManager && event.shiftKey) {
-            refreshNormPointer(container, event.clientX, event.clientY);
-            const res = landmarksManager.processPicking(
-                rtState.current.normPointer,
-                camera,
-                obj3d.current.scene,
-                (
-                    (nextLandmarkId != '')
-                        ?
-                        {
-                            landmarkId: nextLandmarkId,
-                            color: knownLandMarks.get(nextLandmarkId)?.color
-                        } as CreateLandMarkOptions
-                        :
-                        undefined
-                ),
-                (instanceId) => {
-                    setMarkInstances(landmarksManager.getMarkInstances());
-                    setNextLandmarkId('');
-                }
-            );
+        if (obj3d.current.scene && landmarksManager && camera) {
+            if (event.shiftKey) {
 
-            res.modified && renderAll();
+                //refresh highlighted bullets, and optionally create new one
+
+                refreshNormPointer(container, event.clientX, event.clientY);
+                const res = landmarksManager.processPicking(
+                    rtState.current.normPointer,
+                    camera,
+                    obj3d.current.scene,
+                    (
+                        (nextLandmarkId != '')
+                            ?
+                            {
+                                landmarkId: nextLandmarkId,
+                                color: knownLandMarks.get(nextLandmarkId)?.color
+                            } as CreateLandMarkOptions
+                            :
+                            undefined
+                    ),
+                    (instanceId) => {
+                        setMarkInstances(landmarksManager.getMarkInstances());
+                        setNextLandmarkId('');
+                        landmarksManager.showMarkBulletsBySlices([0, 1, 2], [indexX, indexY, indexZ]);
+                    }
+                );
+
+                res.modified && renderAll();
+            } else {
+                //refresh highlighted bullets, and update slices' indexes 
+                console.log('clicked', obj3d.current.scene.children);
+            }
         }
     };
 
@@ -1324,9 +1484,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const onRendererMouseMove = (
         event: React.MouseEvent<HTMLDivElement, MouseEvent>,
         container: HTMLDivElement,
-        camera: THREE.OrthographicCamera,
+        camera: THREE.OrthographicCamera | undefined,
     ) => {
-        if (landmarksManager) {
+        if (obj3d.current.scene && landmarksManager && camera) {
             refreshNormPointer(container, event.clientX, event.clientY);
             const res = landmarksManager.processPicking(
                 rtState.current.normPointer,
@@ -1422,7 +1582,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             ?
                             <Alert
                                 confirmButtonText="Close"
-                                isOpen={alertMessage}
+                                isOpen={typeof alertMessage != 'undefined'}
                                 canEscapeKeyCancel={true}
                                 canOutsideClickCancel={true}
                                 onClose={() => {
@@ -1449,7 +1609,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 volRendererContainer.current && onRendererClick(event, volRendererContainer.current, obj3d.current.camera)
                             }
                             onMouseMove={(event) => {
-                                volRendererContainer.current &&onRendererMouseMove(event, volRendererContainer.current, obj3d.current.camera)
+                                volRendererContainer.current && onRendererMouseMove(event, volRendererContainer.current, obj3d.current.camera)
                             }}
                         >
                         </div>
@@ -1477,8 +1637,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 display: 'grid',
                                 position: 'absolute',
                                 width: '100%', height: '100%',
-                                gridTemplateColumns: '1fr 1fr 1fr',
-                                gridTemplateRows: '1fr 1fr',
+                                gridTemplateColumns: '66% 34%',
+                                gridTemplateRows: '50% 50%',
                                 gap: '1px 3px',
                                 overflow: 'hidden',
                                 backgroundColor: 'silver',
@@ -1487,12 +1647,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             <div
                                 ref={sliceZRendererContainer}
                                 style={{
-                                    gridColumn: '1 / 3',
+                                    gridColumn: '1',
                                     gridRow: '1 / 3',
-                                    backgroundColor: 'red',
                                 }}
                                 onClick={(event) =>
-                                    sliceZRendererContainer.current && onRendererClick(event, sliceZRendererContainer.current, obj3d.current.camZ)
+                                    sliceZRendererContainer.current && onRendererClick(event, sliceZRendererContainer.current, obj3d.current.camZ, 3)
                                 }
                                 onMouseMove={(event) => {
                                     sliceZRendererContainer.current && onRendererMouseMove(event, sliceZRendererContainer.current, obj3d.current.camZ)
@@ -1503,12 +1662,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             <div
                                 ref={sliceXRendererContainer}
                                 style={{
-                                    gridColumn: '3',
+                                    gridColumn: '2',
                                     gridRow: '1',
-                                    backgroundColor: 'green',
                                 }}
                                 onClick={(event) =>
-                                    sliceXRendererContainer.current && onRendererClick(event, sliceXRendererContainer.current, obj3d.current.camX)
+                                    sliceXRendererContainer.current && onRendererClick(event, sliceXRendererContainer.current, obj3d.current.camX, 1)
                                 }
                                 onMouseMove={(event) => {
                                     sliceXRendererContainer.current && onRendererMouseMove(event, sliceXRendererContainer.current, obj3d.current.camX)
@@ -1518,12 +1676,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                             <div
                                 ref={sliceYRendererContainer}
                                 style={{
-                                    gridColumn: '3',
+                                    gridColumn: '2',
                                     gridRow: '2 ',
-                                    backgroundColor: 'blue',
                                 }}
                                 onClick={(event) =>
-                                    sliceYRendererContainer.current && onRendererClick(event, sliceYRendererContainer.current, obj3d.current.camY)
+                                    sliceYRendererContainer.current && onRendererClick(event, sliceYRendererContainer.current, obj3d.current.camY, 2)
                                 }
                                 onMouseMove={(event) => {
                                     sliceYRendererContainer.current && onRendererMouseMove(event, sliceYRendererContainer.current, obj3d.current.camY)

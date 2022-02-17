@@ -35,8 +35,8 @@ const PreviewControls = (props: PreviewControlsProps) => {
 
     const [showBrainModel, setShowBrainModel] = useAtom(StAtm.showBrainModel);
 
-    const [, setBrainWireInitRotation] = useAtom(StAtm.brainWireInitRotation);
-    const [fixedWire, setFixedWire] = useAtom(StAtm.fixedWire);
+    const [, setBrainModelInitRotation] = useAtom(StAtm.brainModelInitRotation);
+    const [fixedBrainModel, setFixedBrainModel] = useAtom(StAtm.fixedBrainModel);
 
     const [isothreshold, setIsothreshold] = useAtom(StAtm.isothreshold);
     const [clims, setClims] = useAtom(StAtm.clims);
@@ -49,7 +49,7 @@ const PreviewControls = (props: PreviewControlsProps) => {
         <div
             style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
         >
-            <span>Brain wire:</span>
+            <span>Brain Model:</span>
             <Switch
                 checked={showBrainModel}
                 disabled={!volumeLoaded}
@@ -63,19 +63,19 @@ const PreviewControls = (props: PreviewControlsProps) => {
         <div
             style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: "baseline" }}
         >
-            <span>Brain wire orientation:</span>
+            <span>Brain Model orientation:</span>
             <Switch
-                checked={fixedWire}
+                checked={fixedBrainModel}
                 disabled={!volumeLoaded}
                 label="fixed"
                 onChange={() =>
-                    setFixedWire(!fixedWire)
+                    setFixedBrainModel(!fixedBrainModel)
                 }
             />
             <Button icon="reset"
                 disabled={!volumeLoaded}
                 onClick={() =>
-                    setBrainWireInitRotation(new THREE.Quaternion())
+                    setBrainModelInitRotation(new THREE.Quaternion())
                 }
 
             >Reset</Button>

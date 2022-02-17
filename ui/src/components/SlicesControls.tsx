@@ -25,7 +25,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
 
     const setCameraPOV = useSetAtom(StAtm.cameraPOV);
 
-    const [clipWire, setClipWire] = useAtom(StAtm.clipWire);
+    const [clipWire, setClipWire] = useAtom(StAtm.clipBrainModel);
 
     const [showXSlice, setShowXSlice] = useAtom(StAtm.showXSlice);
     const [showYSlice, setShowYSlice] = useAtom(StAtm.showYSlice);
@@ -66,11 +66,11 @@ const SlicesControls = (props: SlicesControlsProps) => {
                             ?
 
                             <Switch
-                                checked={clipWire === StAtm.ClipWireMode.ClipX}
+                                checked={clipWire === StAtm.ClipBrainModelMode.ClipX}
                                 disabled={maxIndexX <= 0 || !showXSlice}
-                                label="clip brainwire"
+                                label="clip brainModel"
                                 onChange={() =>
-                                    setClipWire(clipWire === StAtm.ClipWireMode.ClipX ? StAtm.ClipWireMode.None : StAtm.ClipWireMode.ClipX)
+                                    setClipWire(clipWire === StAtm.ClipBrainModelMode.ClipX ? StAtm.ClipBrainModelMode.None : StAtm.ClipBrainModelMode.ClipX)
                                 }
                             />
                             :
@@ -130,11 +130,11 @@ const SlicesControls = (props: SlicesControlsProps) => {
                             ?
 
                             <Switch
-                                checked={clipWire === StAtm.ClipWireMode.ClipY}
+                                checked={clipWire === StAtm.ClipBrainModelMode.ClipY}
                                 disabled={maxIndexY <= 0 || !showYSlice}
-                                label="clip brainwire"
+                                label="clip brainModel"
                                 onChange={() =>
-                                    setClipWire(clipWire === StAtm.ClipWireMode.ClipY ? StAtm.ClipWireMode.None : StAtm.ClipWireMode.ClipY)
+                                    setClipWire(clipWire === StAtm.ClipBrainModelMode.ClipY ? StAtm.ClipBrainModelMode.None : StAtm.ClipBrainModelMode.ClipY)
                                 }
                             />
                             :
@@ -196,11 +196,11 @@ const SlicesControls = (props: SlicesControlsProps) => {
                             ?
 
                             <Switch
-                                checked={clipWire === StAtm.ClipWireMode.ClipZ}
+                                checked={clipWire === StAtm.ClipBrainModelMode.ClipZ}
                                 disabled={maxIndexZ <= 0 || !showZSlice}
-                                label="clip brainwire"
+                                label="clip brainModel"
                                 onChange={() =>
-                                    setClipWire(clipWire === StAtm.ClipWireMode.ClipZ ? StAtm.ClipWireMode.None : StAtm.ClipWireMode.ClipZ)
+                                    setClipWire(clipWire === StAtm.ClipBrainModelMode.ClipZ ? StAtm.ClipBrainModelMode.None : StAtm.ClipBrainModelMode.ClipZ)
                                 }
                             />
                             :

@@ -3,8 +3,7 @@ import { atom } from 'jotai'
 import * as THREE from 'three';
 
 import { RegistrationTask } from "./RegistrationTaskHandler";
-
-import { MarkInstance, LandMark } from "./components/LandMarksList";
+import { LandMark, MarkInstance } from './components/LandmarksManager';
 
 const MarmosetLandMarks: LandMark[] = [
 
@@ -37,7 +36,7 @@ export enum BrainModelMode {
     Clipped,
 }
 
-export enum ClipWireMode {
+export enum ClipBrainModelMode {
     None = 'none',
     ClipX = 'x',
     ClipY = 'y',
@@ -72,9 +71,9 @@ export const cameraPOV = atom(CameraPOV.Superior);
 export const showBrainModel = atom(false);
 export const brainModelMode = atom(BrainModelMode.Wire);
 
-export const clipWire = atom(ClipWireMode.None);
-export const brainWireInitRotation = atom(new THREE.Quaternion());
-export const fixedWire = atom(false);
+export const clipBrainModel = atom(ClipBrainModelMode.None);
+export const brainModelInitRotation = atom(new THREE.Quaternion());
+export const fixedBrainModel = atom(false);
 
 export const isothreshold = atom(0.5);
 export const clims = atom([0, 1]);
@@ -109,11 +108,14 @@ export const highMarks = atom([] as string[]);
 
 //state used in listeners 
 export type RealTimeState = {
-    fixedWire: boolean,
-    brainWireInitRotation: THREE.Quaternion,
+    fixedBrainModel: boolean,
+    brainModelInitRotation: THREE.Quaternion,
     deltaRotation: number[],
     stopQ: THREE.Quaternion,
     camDistance: number,
     viewMode: ViewMode,
     normPointer: THREE.Vector2,
+    indexX : number,
+    indexY : number,
+    indexZ : number,
 };

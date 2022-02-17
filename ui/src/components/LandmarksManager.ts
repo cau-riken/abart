@@ -36,7 +36,7 @@ class LandmarksManager {
             this.ringRadius + 0.1, this.ringRadius + 0.1,
             0.0, 2.0 * Math.PI,
             false, 0
-        ).getSpacedPoints(32)
+        ).getSpacedPoints(64)
     );
     static {
         this.ringShape.holes.push(
@@ -46,7 +46,7 @@ class LandmarksManager {
                     this.ringRadius + 0.05, this.ringRadius + 0.05,
                     0.0, 2.0 * Math.PI,
                     true, 0
-                ).getSpacedPoints(32))
+                ).getSpacedPoints(64))
         );
     }
     private static ringGeom = new THREE.ExtrudeGeometry(
@@ -85,8 +85,6 @@ class LandmarksManager {
         ],
 
         ringMat: new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
-        sphereMat: new THREE.MeshPhongMaterial({ color: 0xffffff, emissive: 0xff00ff, specular: 0x00ff00, shininess: 100, side: THREE.FrontSide, transparent: true, opacity: 0.7 }),
-        sphereGeom: new THREE.SphereGeometry(4.5, 12, 12),
 
         ringGeoms: [
             this.ringGeom.clone()
@@ -113,20 +111,20 @@ class LandmarksManager {
     };
 
 
-    private static walkMarksPartsInIds(marksGroup: THREE.Group, markIds: Set<string>, proc: (part: THREE.Object3D) => (void)) {
+    private static walkMarksPartsInIds(marksGroup: THREE.Group, instanceIds: Set<string>, proc: (part: THREE.Object3D) => (void)) {
         this.walkMarkParts(
             marksGroup,
-            mark => markIds.has(mark.userData.markId),
+            mark => instanceIds.has(mark.userData.instanceId),
             proc
         );
     };
 
-    static applySelectedStyle(marksGroup: THREE.Group, markIds: Set<string>) {
-        if (markIds.size) {
+    static applySelectedStyle(marksGroup: THREE.Group, instanceIds: Set<string>) {
+        if (instanceIds.size) {
 
-            this.walkMarksPartsInIds(marksGroup, markIds,
+            this.walkMarksPartsInIds(marksGroup, instanceIds,
                 part => {
-                    if (typeof part.userData?.selector != 'undefined' && part.userData?.selector) {
+                    if (typeof part.userData?.isSelector != 'undefined' && part.userData?.isSelector) {
                         part.visible = true;
                     }
 
@@ -134,11 +132,11 @@ class LandmarksManager {
         }
     };
 
-    static applyUnselectedStyle(marksGroup: THREE.Group, markIds: Set<string>) {
-        if (markIds.size) {
-            this.walkMarksPartsInIds(marksGroup, markIds,
+    static applyUnselectedStyle(marksGroup: THREE.Group, instanceIds: Set<string>) {
+        if (instanceIds.size) {
+            this.walkMarksPartsInIds(marksGroup, instanceIds,
                 part => {
-                    if (typeof part.userData?.selector != 'undefined' && part.userData?.selector) {
+                    if (typeof part.userData?.isSelector != 'undefined' && part.userData?.isSelector) {
                         part.visible = false;
                     }
                 });
@@ -151,36 +149,39 @@ class LandmarksManager {
     ) {
         const mark = new THREE.Group()
 
-        const markId = self.crypto.randomUUID();
-        const markData = { isLandmark: true, markId: markId };
+        const instanceId = self.crypto.randomUUID();
+        const markData = { isLandmark: true, instanceId: instanceId };
         mark.userData = markData;
 
         //in 2D slices view, only scene objects representing the landmark are shown 
         [0, 1, 2].forEach(i => {
+
+            const layerChannel = i + 1;
+            const layerName = layerChannel === 1 ? 'x' : layerChannel === 2 ? 'y' : 'z';
 
             //circle bullet to represent the landmark 
             const geom = this.markerConf.planeGeoms[i];
             const mat = new THREE.MeshBasicMaterial({ color: color, side: THREE.FrontSide, transparent: true, opacity: 0.7 });
             const bullet = new THREE.Mesh(geom, mat);
 
-            bullet.userData = markData;
-            bullet.name = 'bulllet-mesh';
-            bullet.layers.enable(i + 1);
+            bullet.userData = { ...markData, layerChannel: layerChannel };
+            bullet.name = 'bulllet-mesh-' + layerName;
+            bullet.layers.enable(layerChannel);
             mark.add(bullet);
 
             //ring to visually highlight the landmark
             const ringMesh = new THREE.Mesh(this.markerConf.ringGeoms[i], this.markerConf.ringMat);
 
-            ringMesh.userData = { ...markData, selector: true };
-            ringMesh.name = 'ring-mesh';
-            ringMesh.layers.enable(i + 1);
+            ringMesh.userData = { ...markData, layerChannel: layerChannel, isSelector: true };
+            ringMesh.name = 'ring-mesh-' + layerName;
+            ringMesh.layers.enable(layerChannel);
             ringMesh.visible = true;
             mark.add(ringMesh);
 
         });
 
         mark.position.fromArray(xyz);
-        return [mark, markId];
+        return [mark, instanceId];
     };
 
     // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ 
@@ -233,23 +234,53 @@ class LandmarksManager {
 
     getMarkObj(instanceId: string) {
         return this.marksGroup.children
-            .find(mark => (instanceId === mark.userData.markId));
+            .find(mark => (instanceId === mark.userData.instanceId));
     }
 
-    changeSlicesIndex(indices: number[]) {
-        const [indexX, indexY, indexZ] = indices;
+    showAllMarkBullets() {
+        LandmarksManager.walkMarkParts(
+            this.marksGroup,
+            mark => mark.userData?.isLandmark,
+            part => {
+                if (part.userData?.layerChannel) {
+                    part.layers.enable(part.userData?.layerChannel);
+                }
+            }
+        );
+    }
+
+    showMarkBulletsBySlices(dimNums: number[], indices: number[]) {
+        dimNums.forEach(dimNum => {
+            const layerChannel = dimNum + 1;
+            LandmarksManager.walkMarkParts(
+                this.marksGroup,
+                mark => mark.userData?.isLandmark,
+                part => {
+                    if (part.userData?.layerChannel === layerChannel) {
+                        const instance = this.getMarkInstanceById(part.userData?.instanceId);
+                        if (instance) {
+                            if (instance?.indices[dimNum] == indices[dimNum]) {
+                                part.layers.enable(part.userData?.layerChannel);
+                            } else {
+                                part.layers.disable(part.userData?.layerChannel);
+                            }
+                        }
+                    }
+                }
+            );
+        });
     };
 
 
     //only dragabble objects are the circle bullets visible on the view
-    resetDraggable(dragControl: DragControls, layer: number) {
+    resetDraggable(dragControl: DragControls | undefined, layerChannel: number) {
         if (dragControl) {
             dragControl.getObjects().length = 0;
 
             const draggable = this.marksGroup.children
                 .filter(mg => mg.userData.isLandmark)
                 .map(mg => mg.children
-                    .filter(mp => mp.visible && mp.layers.isEnabled(layer))
+                    .filter(mp => mp.visible && mp.userData?.layerChannel === layerChannel)
                 )
                 .flat();
 
@@ -273,7 +304,7 @@ class LandmarksManager {
 
             mark.position.set(x, y, z);
             //reset mark instance's slice indices
-            const markInstance = this.getMarkInstanceById(mark.userData.markId);
+            const markInstance = this.getMarkInstanceById(mark.userData.instanceId);
             if (markInstance) {
                 markInstance.indices = [i, j, k];
             }
@@ -349,7 +380,7 @@ class LandmarksManager {
                     if (createOptions && ntrsect.object?.userData?.isSlice) {
 
                         const [i, j, k, x, y, z] = this.pointToSliceIndexes(ntrsect.point.toArray());
-                        const [mark, markId] = LandmarksManager.createLandmarkObj([x, y, z], createOptions.color);
+                        const [mark, instanceId] = LandmarksManager.createLandmarkObj([x, y, z], createOptions.color);
                         this.marksGroup.add(mark);
 
                         //record newly created mark instance
@@ -358,21 +389,21 @@ class LandmarksManager {
                                 landmarkId: createOptions.landmarkId,
                                 coord: [x, y, z],
                                 indices: [i, j, k],
-                                instanceId: markId
+                                instanceId: instanceId
                             }
                         );
 
-                        onCreated && onCreated(markId);
+                        onCreated && onCreated(instanceId);
                         modified = true;
                         break;
                     }
-                    else if (ntrsect.object?.userData?.isLandmark && ntrsect.object?.userData?.markId) {
+                    else if (ntrsect.object?.userData?.isLandmark && ntrsect.object?.userData?.instanceId) {
 
-                        this.selectedMarks.add(ntrsect.object.userData.markId);
+                        this.selectedMarks.add(ntrsect.object.userData.instanceId);
                         LandmarksManager.applySelectedStyle(this.marksGroup, this.selectedMarks);
                         modified = true;
-                        appeared = [...this.selectedMarks.values()].filter(markId => !previousSelected.has(markId));
-                        disappeared = [...previousSelected.values()].filter(markId => !this.selectedMarks.has(markId));
+                        appeared = [...this.selectedMarks.values()].filter(instanceId => !previousSelected.has(instanceId));
+                        disappeared = [...previousSelected.values()].filter(instanceId => !this.selectedMarks.has(instanceId));
                         break;
                     }
                 }
