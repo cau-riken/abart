@@ -1237,10 +1237,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.brainModel.up.copy(obj3d.current.camera.up);
                 const rotOffset = getBWRotationOffset();
                 obj3d.current.brainModel.setRotationFromQuaternion(rotOffset);
+                setDeltaRotation(
+                    obj3d.current.brainModel.rotation.toArray() as [number, number, number]
+                );
             }
-            setDeltaRotation(
-                obj3d.current.brainModel.rotation.toArray() as [number, number, number]
-            );
         }
 
     };
