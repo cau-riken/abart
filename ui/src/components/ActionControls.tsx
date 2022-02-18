@@ -2,7 +2,6 @@ import * as React from "react";
 import { useAtom } from "jotai";
 
 
-
 import {
     AnchorButton,
     Button,
@@ -14,16 +13,12 @@ import {
 
 import * as StAtm from '../StateAtoms';
 
-
 import { RegistrationTask } from "../RegistrationTaskHandler";
-
 
 type ActionControlsProps = {
 };
 
 const ActionControls = (props: ActionControlsProps) => {
-
-    const [viewMode, setViewMode] = useAtom(StAtm.viewMode);
 
     const [, setAlertMessage] = useAtom(StAtm.alertMessage);
 
@@ -33,15 +28,7 @@ const ActionControls = (props: ActionControlsProps) => {
     const [showLogs, setShowLogs] = useAtom(StAtm.showLogs);
     const [, setLoglines] = useAtom(StAtm.loglines);
 
-    const [knownLandMarksAry,] = useAtom(StAtm.knownLandMarksAry);
-
-    const [markInstances,] = useAtom(StAtm.markInstances);
-
     return (
-        
-            viewMode!=StAtm.ViewMode.None
-            ?
-
         <div
             style={{
                 marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
@@ -51,7 +38,6 @@ const ActionControls = (props: ActionControlsProps) => {
             <div
                 style={{ marginTop: 20, display: 'flex', flexDirection: 'row', justifyContent: 'space-evenly' }}
             >
-
 
                 <Button
                     className="big-button"
@@ -130,9 +116,6 @@ const ActionControls = (props: ActionControlsProps) => {
                 onChange={() => setShowLogs(!showLogs)}
             />
         </div>
-        :
-        null
-
     );
 
 };
