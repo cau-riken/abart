@@ -35,7 +35,7 @@ class NIfTILoader extends Loader {
 
 			try {
 
-				onLoad(scope.parse(data));
+				onLoad(scope.parse(data as ArrayBuffer));
 
 			} catch (e) {
 
@@ -130,6 +130,7 @@ class NIfTILoader extends Loader {
 
 			const datatype = getDataType(niftiHeader.datatypeCode);
 			if (datatype) {
+				volume.datatype = datatype;
 				volume.data = new datatype(niftiImage);
 
 				// get the min and max intensities
@@ -137,7 +138,7 @@ class NIfTILoader extends Loader {
 				const min = min_max[0];
 				const max = min_max[1];
 				volume.min = min;
-				volume.max = max;				
+				volume.max = max;
 				// attach the scalar range to the volume
 				volume.windowLow = min;
 				volume.windowHigh = max;

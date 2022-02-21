@@ -319,8 +319,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
         const wireframe = brainModelMode === StAtm.BrainModelMode.Wire;
         if (obj3d.current.brainModel) {
             obj3d.current.brainModel.traverse(function (child) {
-                if (child.type == 'Mesh') {
-                    (child as THREE.Mesh).material.wireframe = wireframe;
+                if (child.type == 'Mesh' && !Array.isArray((child as THREE.Mesh).material)) {
+                    ((child as THREE.Mesh).material as THREE.Material).wireframe = wireframe;
                 }
             });
         }
@@ -994,13 +994,23 @@ const VolumePreview = (props: VolumePreviewProps) => {
         // Colormap texture
         const cm_viridis = new THREE.TextureLoader().load('resources/cm_viridis.png');
 
-        const texture = new THREE.DataTexture3D(volume.data, volume.xLength, volume.yLength, volume.zLength);
+        //FIXME: only limited combinations of (format + type) is supported by WebGL
+        //(see https://webgl2fundamentals.org/webgl/lessons/webgl-data-textures.html)
+        //For instance Nifti 64bits Float data can not be used for volume rendering
+        let data = volume.data;
+        if (volume.datatype == Float64Array) {
+            data = new Float32Array(volume.data.length);
+            (volume.data as Float64Array).forEach((e, i) => data[i] = e / 2);
+        } else if (volume.datatype == Int16Array) {
+            data = new Float32Array(volume.data.length);
+            (volume.data as Float64Array).forEach((e, i) => data[i] = e * 1.0);
+        }
+
+        const texture = new THREE.DataTexture3D(data, volume.xLength, volume.yLength, volume.zLength);
+
         texture.format = THREE.RedFormat;
-
-        //FIXME
-        //texture.type = volume.threeDataType;
-
         texture.type = THREE.FloatType;
+
         texture.minFilter = texture.magFilter = THREE.LinearFilter;
         texture.unpackAlignment = 1;
         texture.needsUpdate = true;
@@ -1044,9 +1054,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
         mesh.visible = initVisibility;
         mesh.name = 'vol3D-mesh';
         scene.add(mesh);
-
-        //const box = new THREE.BoxHelper(mesh, 0xff0000);
-        //scene.add(box);
 
         obj3d.current.vol3D = mesh;
         obj3d.current.materialVol3D = material;
@@ -1198,14 +1205,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
             //update left-hemisphere to display as wireframe
             leftHemisphere.traverse(function (child) {
-                if (child.isMesh) {
-                    child.material.wireframe = true;
-                    child.material.color = brainModelColor;
-                    //child.material.opacity = 0.9;
-                    //child.material.transparent = true;
-                    child.material.side = THREE.DoubleSide;
-                    child.material.clippingPlanes = clipPlanes;
-                    child.material.clipIntersection = false;
+                if (child.type == 'Mesh' && !Array.isArray((child as THREE.Mesh).material)) {
+                    const material = (child as THREE.Mesh).material as THREE.Material;
+                    material.wireframe = true;
+                    material.color = brainModelColor;
+                    //material.opacity = 0.9;
+                    //material.transparent = true;
+                    material.side = THREE.DoubleSide;
+                    material.clippingPlanes = clipPlanes;
+                    material.clipIntersection = false;
                 }
             });
             //create right-hemisphere by mirroring through sagittal (median) plane
@@ -1296,8 +1304,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
                 obj3d.current.brainModel?.traverse(function (child) {
-                    if (child.isMesh) {
-                        child.material.clippingPlanes = clipPlanes;
+                    if (child.type == 'Mesh' && !Array.isArray((child as THREE.Mesh).material)) {
+                        ((child as THREE.Mesh).material as THREE.Material).clippingPlanes = clipPlanes;
                     }
                 });
             }

@@ -95,7 +95,8 @@ const PreviewControls = (props: PreviewControlsProps) => {
                                             min={volumeValMin}
                                             max={volumeValMax}
                                             disabled={!volumeLoaded || !castIso}
-                                            stepSize={1}
+                                            stepSize={(volumeValMax-volumeValMin)/255}
+                                            labelPrecision={(volumeValMax-volumeValMin)>100 ? 0 : 2}
                                             labelValues={[]}
                                             showTrackFill={false}
                                             value={isothreshold}
@@ -106,7 +107,8 @@ const PreviewControls = (props: PreviewControlsProps) => {
                                             min={volumeValMin}
                                             max={volumeValMax}
                                             disabled={!volumeLoaded}
-                                            stepSize={1}
+                                            stepSize={(volumeValMax-volumeValMin)/255}
+                                            labelPrecision={(volumeValMax-volumeValMin)>100 ? 0 : 2}
                                             labelValues={[]}
                                             showTrackFill={false}
                                             value={clims[0]}
@@ -119,7 +121,8 @@ const PreviewControls = (props: PreviewControlsProps) => {
                                             min={volumeValMin}
                                             max={volumeValMax}
                                             disabled={!volumeLoaded}
-                                            stepSize={1}
+                                            stepSize={(volumeValMax-volumeValMin)/255}
+                                            labelPrecision={(volumeValMax-volumeValMin)>100 ? 0 : 2}
                                             labelValues={[]}
                                             showTrackFill={false}
                                             value={clims[1]}
