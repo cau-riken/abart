@@ -23,6 +23,12 @@ const MarmosetLandMarks: LandMark[] = [
 
 ];
 
+export type LoadedVolumeFile = {
+    file: File | undefined,
+    name: string,
+    ext: string,
+    data: string | ArrayBuffer | undefined
+};
 
 export enum ViewMode {
     None = 'none',
@@ -61,7 +67,7 @@ export const volumeValMin = atom(0.0);
 export const volumeValMax = atom(1.0);
 
 export const viewMode = atom(ViewMode.Slice3D);
-export const alertMessage = atom(undefined as unknown as JSX.Element);
+export const alertMessage = atom<JSX.Element|undefined>(undefined);
 
 export const deltaRotation = atom([0, 0, 0] as [number, number, number]);
 export const cameraRotation = atom({up: [0, 0, 0] as [number, number, number], position: [0, 0, 0] as [number, number, number]});
@@ -92,7 +98,7 @@ export const maxIndexX = atom(0);
 export const maxIndexY = atom(0);
 export const maxIndexZ = atom(0);
 
-export const remoteTask = atom(undefined as unknown as RegistrationTask);
+export const remoteTask = atom<RegistrationTask|undefined>(undefined);
 export const showLogs = atom(false);
 export const loglines = atom([] as string[]);
 
@@ -105,17 +111,3 @@ export const nextLandmarkId = atom('');
 export const markInstances = atom(new Map<string, MarkInstance>());
 export const highMarks = atom([] as string[]);
 
-
-//state used in listeners 
-export type RealTimeState = {
-    fixedBrainModel: boolean,
-    brainModelInitRotation: THREE.Quaternion,
-    deltaRotation: number[],
-    stopQ: THREE.Quaternion,
-    camDistance: number,
-    viewMode: ViewMode,
-    normPointer: THREE.Vector2,
-    indexX : number,
-    indexY : number,
-    indexZ : number,
-};

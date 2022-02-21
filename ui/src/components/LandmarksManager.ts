@@ -17,6 +17,12 @@ export type LandMark = {
     descr: string,
 };
 
+export enum PickingMode {
+    LandmarkCreation,
+    SlicesSelection,
+    Hovering,
+}
+
 export type CreateLandMarkOptions = {
     landmarkId: string,
     color: string,
@@ -149,7 +155,7 @@ class LandmarksManager {
     ) {
         const mark = new THREE.Group()
 
-        const instanceId = self.crypto.randomUUID();
+        const instanceId = mark.uuid;
         const markData = { isLandmark: true, instanceId: instanceId };
         mark.userData = markData;
 
@@ -181,7 +187,7 @@ class LandmarksManager {
         });
 
         mark.position.fromArray(xyz);
-        return [mark, instanceId];
+        return mark;
     };
 
     // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ 
@@ -352,12 +358,14 @@ class LandmarksManager {
         normPointer: THREE.Vector2,
         camera: THREE.Camera,
         scene: THREE.Scene,
+        pickingMode: PickingMode,
         createOptions?: CreateLandMarkOptions,
         onCreated?: (instanceId: string) => void) {
 
         let modified = false;
         let appeared: string[] = [];
         let disappeared: string[] = [];
+        let indices: number[] | undefined = undefined;
         if (camera && scene) {
             // update the picking ray with the camera and pointer position
             LandmarksManager.raycaster.setFromCamera(normPointer, camera);
@@ -377,25 +385,31 @@ class LandmarksManager {
                         modified = true;
                     }
 
-                    if (createOptions && ntrsect.object?.userData?.isSlice) {
+                    if (ntrsect.object?.userData?.isSlice && pickingMode!=PickingMode.Hovering) {
 
                         const [i, j, k, x, y, z] = this.pointToSliceIndexes(ntrsect.point.toArray());
-                        const [mark, instanceId] = LandmarksManager.createLandmarkObj([x, y, z], createOptions.color);
-                        this.marksGroup.add(mark);
+                        if (createOptions) {
+                            const mark = LandmarksManager.createLandmarkObj([x, y, z], createOptions.color);
+                            const instanceId = mark.uuid;
+                            this.marksGroup.add(mark);
 
-                        //record newly created mark instance
-                        this.markInstances.set(createOptions.landmarkId,
-                            {
-                                landmarkId: createOptions.landmarkId,
-                                coord: [x, y, z],
-                                indices: [i, j, k],
-                                instanceId: instanceId
-                            }
-                        );
+                            //record newly created mark instance
+                            this.markInstances.set(createOptions.landmarkId,
+                                {
+                                    landmarkId: createOptions.landmarkId,
+                                    coord: [x, y, z],
+                                    indices: [i, j, k],
+                                    instanceId,
+                                }
+                            );
 
-                        onCreated && onCreated(instanceId);
-                        modified = true;
+                            onCreated && onCreated(instanceId);
+                            modified = true;
+                        } else {
+                            indices = [i, j, k] ;
+                        }
                         break;
+
                     }
                     else if (ntrsect.object?.userData?.isLandmark && ntrsect.object?.userData?.instanceId) {
 
@@ -411,7 +425,7 @@ class LandmarksManager {
             }
         }
 
-        return { modified, appeared, disappeared };
+        return { modified, appeared, disappeared, indices };
     };
 
     setHighlight(landmarkId: string) {

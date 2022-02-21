@@ -18,6 +18,7 @@ import {
     Spinner,
     SpinnerSize,
     ResizeEntry,
+    Icon,
 } from "@blueprintjs/core";
 
 import {
@@ -29,7 +30,7 @@ import * as StAtm from '../StateAtoms';
 
 import SinkLogger from "./SinkLogger";
 import LandMarksList from "./LandMarksList";
-import { MarkInstance, LandMark } from "./LandmarksManager";
+import { PickingMode } from "./LandmarksManager";
 
 import "./VolumePreview.scss";
 
@@ -47,15 +48,9 @@ type ListenerInfo = {
     listener: any,
     dispatcher: EventDispatcher,
 }
-export type LoadedVolumeFile = {
-    file: File | undefined,
-    name: string,
-    ext: string,
-    data: string | ArrayBuffer | undefined
-};
 
 type VolumePreviewProps = {
-    volumeFile: LoadedVolumeFile | undefined,
+    volumeFile: StAtm.LoadedVolumeFile | undefined,
 };
 
 const setupInset = (insetAspect: number, camera: THREE.Camera) => {
@@ -73,66 +68,85 @@ const setupInset = (insetAspect: number, camera: THREE.Camera) => {
     return { insetScene, insetCamera };
 }
 
+//references of ThreeJS objects not created by React
 export type Obj3dRefs = {
 
-    stats: Stats | undefined,
+    stats?: Stats | undefined,
 
     //main scene (volume 3D & slices in 3D)
-    renderer: THREE.WebGLRenderer | undefined,
-    camera: THREE.OrthographicCamera | undefined,
-    scene: THREE.Scene | undefined,
-    controls: ArcballControls | undefined,
+    renderer?: THREE.WebGLRenderer | undefined,
+    camera?: THREE.OrthographicCamera | undefined,
+    scene?: THREE.Scene | undefined,
+    controls?: ArcballControls | undefined,
 
     //insets related  
-    renderer2: THREE.Renderer | undefined,
-    aspect2: number,
-    camera2: THREE.PerspectiveCamera | undefined,
-    scene2: THREE.Scene | undefined,
+    renderer2?: THREE.Renderer | undefined,
+    aspect2?: number,
+    camera2?: THREE.PerspectiveCamera | undefined,
+    scene2?: THREE.Scene | undefined,
 
     //for slices rendering
-    volume: Volume,
-    sliceX: VolumeSlice,
-    sliceY: VolumeSlice,
-    sliceZ: VolumeSlice,
+    volume?: Volume | undefined,
+    sliceX?: VolumeSlice | undefined,
+    sliceY?: VolumeSlice | undefined,
+    sliceZ?: VolumeSlice | undefined,
 
     //for volume rendering
-    vol3D: THREE.Mesh,
-    materialVol3D: THREE.ShaderMaterial,
+    vol3D?: THREE.Mesh | undefined,
+    materialVol3D?: THREE.ShaderMaterial | undefined,
 
     //brain model
-    brainModel: THREE.Group,
+    brainModel?: THREE.Group | undefined,
 
     //groups for user created landmarks
-    marksGroup: THREE.Group | undefined,
+    marksGroup?: THREE.Group | undefined,
 
     //volume bounding box 
-    cube: THREE.Mesh,
+    cube?: THREE.Mesh | undefined,
 
-    boxAniMixer: THREE.AnimationMixer,
-    boxAninAction: THREE.AnimationAction,
+    boxAniMixer?: THREE.AnimationMixer | undefined,
+    boxAninAction?: THREE.AnimationAction | undefined,
 
     //standard planes scenes (slices in 2D)
-    rendX: THREE.WebGLRenderer | undefined,
-    camX: THREE.OrthographicCamera | undefined,
-    sliceXCtrl: ArcballControls | undefined,
-    dragCtrlX: DragControls | undefined,
+    rendX?: THREE.WebGLRenderer | undefined,
+    camX?: THREE.OrthographicCamera | undefined,
+    sliceXCtrl?: ArcballControls | undefined,
+    dragCtrlX?: DragControls | undefined,
 
-    rendY: THREE.WebGLRenderer | undefined,
-    camY: THREE.OrthographicCamera | undefined,
-    sliceYCtrl: ArcballControls | undefined,
-    dragCtrlY: DragControls | undefined,
+    rendY?: THREE.WebGLRenderer | undefined,
+    camY?: THREE.OrthographicCamera | undefined,
+    sliceYCtrl?: ArcballControls | undefined,
+    dragCtrlY?: DragControls | undefined,
 
-    rendZ: THREE.WebGLRenderer | undefined,
-    camZ: THREE.OrthographicCamera | undefined,
-    sliceZCtrl: ArcballControls | undefined,
-    dragCtrlZ: DragControls | undefined,
+    rendZ?: THREE.WebGLRenderer | undefined,
+    camZ?: THREE.OrthographicCamera | undefined,
+    sliceZCtrl?: ArcballControls | undefined,
+    dragCtrlZ?: DragControls | undefined,
 
 
     //others ThreeJS objects which need to be released when undloading volume 
-    disposable: THREE.Object3D[],
+    disposable: (THREE.BufferGeometry | THREE.Material | THREE.Texture)[],
 
     listeners: ListenerInfo[],
 
+};
+
+
+//Part of the state used within ThreeJs listeners. 
+//Note: Because ThreeJs is updated more frequently than React, the state managed by the latter might 
+//      not be up-to-date when needed by ThreeJs; 
+//      Hence part of the state is also handled as regular instance variable.
+export type RealTimeState = {
+    fixedBrainModel?: boolean,
+    brainModelInitRotation?: THREE.Quaternion,
+    deltaRotation?: number[],
+    stopQ?: THREE.Quaternion,
+    camDistance?: number,
+    viewMode?: StAtm.ViewMode,
+    normPointer: THREE.Vector2,
+    indexX?: number,
+    indexY?: number,
+    indexZ?: number,
 };
 
 
@@ -187,27 +201,35 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [markInstances, setMarkInstances] = useAtom(StAtm.markInstances);
     const [highMarks, setHighMarks] = useAtom(StAtm.highMarks);
 
+    const [sliceRendPosIndices, setSliceRendPosIndices] = React.useState([2, 0, 1]);
 
     const [mriBoxMinMax, setMRIBoxMinMax] = React.useState({ min: [0, 0, 0], max: [0, 0, 0] });
     const [landmarksManager, setLandmarksManager] = React.useState<LandmarksManager>();
 
 
-    const volRendererContainer = React.useRef<HTMLDivElement>();
+    const volRendererContainer = React.useRef<HTMLDivElement>(null);
     const clock = React.useRef(new THREE.Clock());
 
     const objectURLs = React.useRef<string[]>([]);
-    const volRendererInset = React.useRef<HTMLDivElement>();
+    const volRendererInset = React.useRef<HTMLDivElement>(null);
 
-    const sliceXRendererContainer = React.useRef<HTMLDivElement>();
-    const sliceYRendererContainer = React.useRef<HTMLDivElement>();
-    const sliceZRendererContainer = React.useRef<HTMLDivElement>();
+    const sliceXRendererContainer = React.useRef<HTMLDivElement>(null);
+    const sliceYRendererContainer = React.useRef<HTMLDivElement>(null);
+    const sliceZRendererContainer = React.useRef<HTMLDivElement>(null);
+
+    const sliceRendPlaceholder1 = React.useRef<HTMLDivElement>(null);
+    const sliceRendPlaceholder2 = React.useRef<HTMLDivElement>(null);
+    const sliceRendPlaceholder3 = React.useRef<HTMLDivElement>(null);
+
 
     const obj3d = React.useRef<Obj3dRefs>({
         disposable: [],
         listeners: []
     });
 
-    const rtState = React.useRef<StAtm.RealTimeState>({
+
+
+    const rtState = React.useRef<RealTimeState>({
         normPointer: new THREE.Vector2()
     });
 
@@ -279,7 +301,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             landmarksManager?.showMarkBulletsBySlices([0, 1, 2], [indexX, indexY, indexZ]);
         }
 
-        handleResize(null);
+        handleResize();
 
     }, [viewMode]);
 
@@ -308,7 +330,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
     React.useEffect(() => {
-        if (obj3d.current.controls) {
+        if (obj3d.current.controls && rtState.current.camDistance) {
 
             let cameraRotation;
             switch (cameraPOV) {
@@ -357,6 +379,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
             if (!showXSlice && clipBrainModel === StAtm.ClipBrainModelMode.ClipX) {
                 setBrainModel(StAtm.ClipBrainModelMode.None);
             }
+            if (!showXSlice && !showYSlice && !showZSlice) {
+                setShowYSlice(true);
+            }
+            if (viewMode === StAtm.ViewMode.Slice2D) {
+                handleResize();
+            }
             renderAll();
         }
 
@@ -369,6 +397,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
             if (!showYSlice && clipBrainModel == StAtm.ClipBrainModelMode.ClipY) {
                 setBrainModel(StAtm.ClipBrainModelMode.None);
             }
+            if (!showXSlice && !showYSlice && !showZSlice) {
+                setShowZSlice(true);
+            }
+            if (viewMode === StAtm.ViewMode.Slice2D) {
+                handleResize();
+            }
             renderAll();
         }
 
@@ -380,6 +414,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
             obj3d.current.sliceZ.mesh.material.visible = showZSlice;
             if (!showZSlice && clipBrainModel === StAtm.ClipBrainModelMode.ClipZ) {
                 setBrainModel(StAtm.ClipBrainModelMode.None);
+            }
+            if (!showXSlice && !showYSlice && !showZSlice) {
+                setShowXSlice(true);
+            }
+            if (viewMode === StAtm.ViewMode.Slice2D) {
+                handleResize();
             }
             renderAll();
         }
@@ -461,6 +501,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
     React.useEffect(() => {
+
+        if (volumeLoaded && StAtm.ViewMode.Slice2D === viewMode) {
+            handleResize();
+        }
+
+    }, [sliceRendPosIndices]);
+
+
+    React.useEffect(() => {
         if (landmarksManager) {
             landmarksManager.resetDraggable(obj3d.current.dragCtrlX, 1);
             landmarksManager.resetDraggable(obj3d.current.dragCtrlY, 2);
@@ -517,7 +566,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     }, [showBrainModel]);
 
     React.useEffect(() => {
-        if (obj3d.current.camera) {
+        if (obj3d.current.camera && rtState.current.stopQ) {
             if (!fixedBrainModel) {
                 //from now on brainModel will look like it's moving along the camera
                 //(but it is actually static)
@@ -543,7 +592,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     React.useEffect(() => {
 
-        rtState.current.brainBrainModelInitRotation = brainModelInitRotation;
+        rtState.current.brainModelInitRotation = brainModelInitRotation;
         renderAll();
 
     }, [brainModelInitRotation]);
@@ -662,15 +711,16 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const adjustSliceCamOnResize = (
         renderer: THREE.Renderer | undefined,
-        rendContainer: HTMLDivElement | undefined,
+        width: number,
+        height: number,
         camera: THREE.OrthographicCamera | undefined,
         dimNum: number,
     ) => {
-        if (renderer && rendContainer && camera) {
-            renderer.setSize(rendContainer.offsetWidth, rendContainer.offsetHeight);
+        if (renderer && camera) {
+            renderer.setSize(width, height);
 
-            const sAspect = rendContainer.offsetWidth / rendContainer.offsetHeight;
-            const horiz  = (dimNum === 2) ? 1 : 2;
+            const sAspect = width / height;
+            const horiz = (dimNum === 2) ? 1 : 2;
             const vert = (dimNum === 0) ? 1 : 0;
 
             const iLeft = mriBoxMinMax.min[horiz];
@@ -682,7 +732,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             const iAspect = iWidth / iHeight;
 
             const margin = (iWidth * sAspect / iAspect - iWidth) / 2;
-            
+
             camera.left = iLeft - margin;
             camera.right = iRight + margin;
             camera.top = iTop;
@@ -693,7 +743,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
     //handle resize
-    const handleResize = (entries?: ResizeEntry[]) => {
+    const handleResize = (entries?: ResizeEntry[] | null) => {
         if (viewMode != StAtm.ViewMode.Slice2D) {
             if (obj3d.current.renderer) {
                 const renderer = obj3d.current.renderer;
@@ -714,10 +764,36 @@ const VolumePreview = (props: VolumePreviewProps) => {
             }
         } else {
 
+            const sliceRendPlaceholders = [sliceRendPlaceholder1, sliceRendPlaceholder2, sliceRendPlaceholder3]
+            const showISlices = [showXSlice, showYSlice, showZSlice];
 
-            adjustSliceCamOnResize(obj3d.current.rendX, sliceXRendererContainer.current, obj3d.current.camX, 0);
-            adjustSliceCamOnResize(obj3d.current.rendY, sliceYRendererContainer.current, obj3d.current.camY, 1);
-            adjustSliceCamOnResize(obj3d.current.rendZ, sliceZRendererContainer.current, obj3d.current.camZ, 2);
+            let nextPlaceholderIdx = 0;
+            sliceRendPosIndices.forEach(plane => {
+
+                if (showISlices[plane]) {
+                    const placeholder = sliceRendPlaceholders[nextPlaceholderIdx];
+                    nextPlaceholderIdx++;
+                    if (placeholder.current) {
+                        const width = placeholder.current.offsetWidth;
+                        const height = placeholder.current.offsetHeight;
+                        let rendContainer: HTMLDivElement | null = null;
+                        if (plane == 0) {
+                            rendContainer = sliceXRendererContainer.current;
+                            adjustSliceCamOnResize(obj3d.current.rendX, width, height, obj3d.current.camX, 0);
+                        } else if (plane == 1) {
+                            rendContainer = sliceYRendererContainer.current;
+                            adjustSliceCamOnResize(obj3d.current.rendY, width, height, obj3d.current.camY, 1);
+                        } else if (plane == 2) {
+                            rendContainer = sliceZRendererContainer.current;
+                            adjustSliceCamOnResize(obj3d.current.rendZ, width, height, obj3d.current.camZ, 2);
+                        }
+                        if (rendContainer) {
+                            rendContainer.style.top = placeholder.current.offsetTop + 'px';
+                            rendContainer.style.left = placeholder.current.offsetLeft + 'px';
+                        }
+                    }
+                }
+            });
         }
 
         renderAll();
@@ -766,7 +842,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             obj3d.current.renderer2 = renderer2;
             obj3d.current.aspect2 = aspect2;
 
-            const createSliceRenderer = (rendContainer: HTMLDivElement | undefined) => {
+            const createSliceRenderer = (rendContainer: HTMLDivElement | null) => {
                 let renderer: THREE.WebGLRenderer | undefined;
                 if (rendContainer) {
                     renderer = new THREE.WebGLRenderer({
@@ -790,7 +866,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         return () => {
             clearBeforeVolumeChange();
 
-            const removeRendererDom = (domElement: HTMLDivElement | HTMLCanvasElement | undefined, container: HTMLDivElement | undefined) => {
+            const removeRendererDom = (domElement: HTMLDivElement | HTMLCanvasElement | undefined, container: HTMLDivElement | null) => {
                 domElement && container && container.removeChild(domElement);
             }
             removeRendererDom(obj3d.current.renderer?.domElement, volRendererContainer.current);
@@ -802,7 +878,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
             removeRendererDom(obj3d.current.rendY?.domElement, sliceYRendererContainer.current);
             removeRendererDom(obj3d.current.rendZ?.domElement, sliceZRendererContainer.current);
 
-            obj3d.current = {};
+            obj3d.current = {
+                disposable: [],
+                listeners: []
+            };
         }
 
     }, []);
@@ -874,7 +953,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         const delta = clock.current.getDelta();
                         obj3d.current.boxAniMixer.update(delta);
                         //as long as animation isn't finished...
-                        if (obj3d.current.boxAninAction.isRunning()) {
+                        if (obj3d.current.boxAninAction?.isRunning()) {
                             //reiterate another rendering
                             //(don't need 60FPS for this animation!)
                             setTimeout(renderAll, 40);
@@ -895,13 +974,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const onCameraChanged = () => {
 
-        setCameraPOV(StAtm.CameraPOV.Free);
+        if (cameraPOV != StAtm.CameraPOV.Free) {
+            setCameraPOV(StAtm.CameraPOV.Free);
+        }
 
         //keep the brainModel in sync with camera rotation to make it look like it's static
         updateBrainModelRotation();
 
         //show Volume's bounding-box while rotating
-        if (StAtm.ViewMode.Volume3D != rtState.current.viewMode) {
+        if (StAtm.ViewMode.Volume3D != rtState.current.viewMode && obj3d.current.boxAninAction) {
             obj3d.current.boxAninAction.stop();
             obj3d.current.boxAninAction.play();
         }
@@ -915,6 +996,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         const texture = new THREE.DataTexture3D(volume.data, volume.xLength, volume.yLength, volume.zLength);
         texture.format = THREE.RedFormat;
+
+        //FIXME
+        //texture.type = volume.threeDataType;
 
         texture.type = THREE.FloatType;
         texture.minFilter = texture.magFilter = THREE.LinearFilter;
@@ -1005,11 +1089,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         {
             sliceZ.mesh.name = 'sliceZ-mesh';
-            sliceZ.mesh.userData = { isSlice: true, axis: 'z' };
+            sliceZ.mesh.userData = { isSlice: true, isBorder: true, axis: 'z' };
             const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceZ.mesh.geometry),
                 new THREE.LineBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.4 })
             );
-            border.layers.disable(0);
             border.layers.enable(1);
             border.layers.enable(2);
             sliceZ.mesh.add(border);
@@ -1028,11 +1111,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         {
             sliceY.mesh.name = 'sliceY-mesh';
-            sliceY.mesh.userData = { isSlice: true, axis: 'y' };
+            sliceY.mesh.userData = { isSlice: true, isBorder: true, axis: 'y' };
             const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceY.mesh.geometry),
                 new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 })
             );
-            border.layers.disable(0);
             border.layers.enable(1);
             border.layers.enable(3);
             sliceY.mesh.add(border);
@@ -1052,11 +1134,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         {
             sliceX.mesh.name = 'sliceX-mesh';
-            sliceX.mesh.userData = { isSlice: true, axis: 'x' };
+            sliceX.mesh.userData = { isSlice: true, isBorder: true, axis: 'x' };
             const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceX.mesh.geometry),
                 new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.4 })
             );
-            border.layers.disable(0);
             border.layers.enable(2);
             border.layers.enable(3);
             sliceX.mesh.add(border);
@@ -1076,6 +1157,26 @@ const VolumePreview = (props: VolumePreviewProps) => {
         ]);
     };
 
+    const createLandMarks = () => {
+        const landmarkGroup = new THREE.Group();
+        landmarkGroup.name = 'landmarks-group';
+        const geom = new THREE.SphereGeometry(6, 4, 4);
+        const wireframe = new THREE.WireframeGeometry(geom);
+
+
+        for (const lm of knownLandMarksAry) {
+            const isNull = lm.coord[0] === 0 && lm.coord[1] === 0 && lm.coord[2] === 0;
+            if (isNull) continue;
+
+            const mat = new THREE.MeshBasicMaterial({ color: lm.color, side: THREE.FrontSide, transparent: true, opacity: 0.4 });
+            //const sphere = new THREE.Mesh(geom, mat)
+            const sphere = new THREE.LineSegments(wireframe, mat);
+            sphere.position.fromArray(lm.coord);
+            sphere.name = 'landmark-' + lm.id;
+            landmarkGroup.add(sphere);
+        }
+        return landmarkGroup;
+    }
 
     const initBrainModel = (scene: THREE.Scene, bboxMax: number[], initVisibility: boolean) => {
 
@@ -1136,12 +1237,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 0, 0, sf * mboxZLen / brainboxZLen, 0,
                 0, 0, 0, 1
             );
-            
+
             brainModel.applyMatrix4(scaleTemplMatrix);
             brainModel.visible = initVisibility;
             scene.add(brainModel);
             obj3d.current.brainModel = brainModel;
 
+            const landmarks = createLandMarks();
+            landmarks.applyMatrix4(scaleTemplMatrix.invert());
+            brainModel.add(landmarks);
 
             const initialQ = new THREE.Quaternion();
             brainModel.getWorldQuaternion(initialQ);
@@ -1191,7 +1295,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 );
 
 
-                obj3d.current.brainModel.traverse(function (child) {
+                obj3d.current.brainModel?.traverse(function (child) {
                     if (child.isMesh) {
                         child.material.clippingPlanes = clipPlanes;
                     }
@@ -1206,7 +1310,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const getRotationOffset = () => {
         //current camera rotation
         const camQ = new THREE.Quaternion();
-        if (obj3d.current.camera) {
+        if (obj3d.current.camera && rtState.current.brainModelInitRotation && rtState.current.stopQ) {
             obj3d.current.camera.getWorldQuaternion(camQ);
 
             //last updated brainModel rotation 
@@ -1222,7 +1326,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const getBWRotationOffset = () => {
         //concatenate initial rotation of brainModel to camera rotation
         const camQ = new THREE.Quaternion();
-        if (obj3d.current.camera) {
+        if (obj3d.current.camera && rtState.current.brainModelInitRotation) {
             obj3d.current.camera.getWorldQuaternion(camQ);
             return camQ.multiply(rtState.current.brainModelInitRotation);
         } else {
@@ -1282,158 +1386,166 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const initSceneOnVolumeLoaded = (volume: Volume) => {
 
         if (obj3d.current.renderer && obj3d.current.scene && obj3d.current.camera
-            && sliceXRendererContainer.current && sliceYRendererContainer.current && sliceZRendererContainer.current) {
+            && sliceXRendererContainer.current && sliceYRendererContainer.current && sliceZRendererContainer.current
+            && rtState.current.stopQ) {
             obj3d.current.volume = volume;
 
             initVol3D(obj3d.current.scene, volume, true);
             initSlices(obj3d.current.scene, volume);
 
-            const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
-            const mriBoxMinMax = { min: mriBbox.min.toArray(), max: mriBbox.max.toArray() };
-            setMRIBoxMinMax(mriBoxMinMax);
+            if (obj3d.current.cube) {
+                const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
+                const mriBoxMinMax = { min: mriBbox.min.toArray(), max: mriBbox.max.toArray() };
+                setMRIBoxMinMax(mriBoxMinMax);
 
-            const mboxZLen = mriBoxMinMax.max[2];
-            const camDistance = 6 * mboxZLen;
-            obj3d.current.camera.position.z = camDistance;
-            rtState.current.camDistance = camDistance;
-            obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
-
-
-            //group for landmarks
-            obj3d.current.marksGroup = new THREE.Group();
-            obj3d.current.marksGroup.name = 'marks-group'
-            obj3d.current.scene.add(obj3d.current.marksGroup);
-
-            //-- controls for 2D slice view : Pan & Zoom ----------------------
-            const sliceXCamDistance = mriBoxMinMax.max[0] - mriBoxMinMax.min[0];
-            obj3d.current.camX = new THREE.OrthographicCamera();
-            obj3d.current.camX.layers.set(1);
-            obj3d.current.camX.name = 'viewX-cam';
-            obj3d.current.scene.add(obj3d.current.camX);
-
-            obj3d.current.camX.up.fromArray([0, 0, 1]);
-            obj3d.current.camX.position.fromArray([- sliceXCamDistance, 0, 0]);
-            obj3d.current.camX.lookAt(0, 0, 0);
-
-            const sliceYCamDistance = mriBoxMinMax.max[1] - mriBoxMinMax.min[1];
-            obj3d.current.camY = new THREE.OrthographicCamera();
-            obj3d.current.camY.layers.set(2);
-            obj3d.current.camY.name = 'viewY-cam';
-            obj3d.current.scene.add(obj3d.current.camY);
-
-            obj3d.current.camY.up.fromArray([0, 0, 1]);
-            obj3d.current.camY.position.fromArray([0, sliceYCamDistance, 0, 0]);
-            obj3d.current.camY.lookAt(0, 0, 0);
-
-            const sliceZCamDistance = mriBoxMinMax.max[2] - mriBoxMinMax.min[2];
-            obj3d.current.camZ = new THREE.OrthographicCamera();
-            obj3d.current.camZ.layers.set(3);
-            obj3d.current.camZ.name = 'viewZ-cam';
-            obj3d.current.scene.add(obj3d.current.camZ);
-
-            obj3d.current.camZ.up.fromArray([0, 1, 0]);
-            obj3d.current.camZ.position.fromArray([0, 0, sliceZCamDistance]);
-            obj3d.current.camZ.lookAt(0, 0, 0);
-            //-----------------------------------------------------------------
+                const mboxZLen = mriBoxMinMax.max[2];
+                const camDistance = 6 * mboxZLen;
+                obj3d.current.camera.position.z = camDistance;
+                rtState.current.camDistance = camDistance;
+                obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
 
 
-            const landmarksManager = new LandmarksManager(
-                obj3d.current.marksGroup, {
-                maxIndexX: volume.dimensions[0] - 1,
-                maxIndexY: volume.dimensions[1] - 1,
-                maxIndexZ: volume.dimensions[2] - 1
-            });
-            setLandmarksManager(landmarksManager);
+                //group for landmarks
+                obj3d.current.marksGroup = new THREE.Group();
+                obj3d.current.marksGroup.name = 'marks-group'
+                obj3d.current.scene.add(obj3d.current.marksGroup);
+
+                //-- controls for 2D slice view : Pan & Zoom ----------------------
+                const sliceXCamDistance = mriBoxMinMax.max[0] - mriBoxMinMax.min[0];
+                obj3d.current.camX = new THREE.OrthographicCamera();
+                obj3d.current.camX.layers.set(1);
+                obj3d.current.camX.name = 'viewX-cam';
+                obj3d.current.scene.add(obj3d.current.camX);
+
+                obj3d.current.camX.up.fromArray([0, 0, 1]);
+                obj3d.current.camX.position.fromArray([- sliceXCamDistance, 0, 0]);
+                obj3d.current.camX.lookAt(0, 0, 0);
+
+                const sliceYCamDistance = mriBoxMinMax.max[1] - mriBoxMinMax.min[1];
+                obj3d.current.camY = new THREE.OrthographicCamera();
+                obj3d.current.camY.layers.set(2);
+                obj3d.current.camY.name = 'viewY-cam';
+                obj3d.current.scene.add(obj3d.current.camY);
+
+                obj3d.current.camY.up.fromArray([0, 0, 1]);
+                obj3d.current.camY.position.fromArray([0, sliceYCamDistance, 0, 0]);
+                obj3d.current.camY.lookAt(0, 0, 0);
+
+                const sliceZCamDistance = mriBoxMinMax.max[2] - mriBoxMinMax.min[2];
+                obj3d.current.camZ = new THREE.OrthographicCamera();
+                obj3d.current.camZ.layers.set(3);
+                obj3d.current.camZ.name = 'viewZ-cam';
+                obj3d.current.scene.add(obj3d.current.camZ);
+
+                obj3d.current.camZ.up.fromArray([0, 1, 0]);
+                obj3d.current.camZ.position.fromArray([0, 0, sliceZCamDistance]);
+                obj3d.current.camZ.lookAt(0, 0, 0);
+                //-----------------------------------------------------------------
 
 
-            //-- controls for 2D slice view : Pan & Zoom ----------------------
-            if (obj3d.current.rendX) {
-                const sliceCtrl = new ArcballControls(obj3d.current.camX, obj3d.current.rendX.domElement);
-                sliceCtrl.enableRotate = false;
-                sliceCtrl.addEventListener('change', renderSliceX);
-                obj3d.current.listeners.push({ event: 'change', listener: renderSliceX, dispatcher: sliceCtrl });
-                obj3d.current.sliceXCtrl = sliceCtrl;
+                const landmarksManager = new LandmarksManager(
+                    obj3d.current.marksGroup, {
+                    maxIndexX: volume.dimensions[0] - 1,
+                    maxIndexY: volume.dimensions[1] - 1,
+                    maxIndexZ: volume.dimensions[2] - 1
+                });
+                setLandmarksManager(landmarksManager);
+
+
+                //-- controls for 2D slice view : Pan & Zoom ----------------------
+                if (obj3d.current.rendX) {
+                    const sliceCtrl = new ArcballControls(obj3d.current.camX, obj3d.current.rendX.domElement);
+                    sliceCtrl.enableRotate = false;
+                    sliceCtrl.addEventListener('change', renderSliceX);
+                    obj3d.current.listeners.push({ event: 'change', listener: renderSliceX, dispatcher: sliceCtrl });
+                    obj3d.current.sliceXCtrl = sliceCtrl;
+                }
+                if (obj3d.current.rendY) {
+                    const sliceCtrl = new ArcballControls(obj3d.current.camY, obj3d.current.rendY.domElement);
+                    sliceCtrl.enableRotate = false;
+                    sliceCtrl.addEventListener('change', renderSliceY);
+                    obj3d.current.listeners.push({ event: 'change', listener: renderSliceY, dispatcher: sliceCtrl });
+                    obj3d.current.sliceYCtrl = sliceCtrl;
+                }
+                if (obj3d.current.rendZ) {
+                    const sliceCtrl = new ArcballControls(obj3d.current.camZ, obj3d.current.rendZ.domElement);
+                    sliceCtrl.enableRotate = false;
+                    sliceCtrl.addEventListener('change', renderSliceZ);
+                    obj3d.current.listeners.push({ event: 'change', listener: renderSliceZ, dispatcher: sliceCtrl });
+                    obj3d.current.sliceZCtrl = sliceCtrl;
+                }
+                //-----------------------------------------------------------------
+
+                //-- controls for 2D slice view : DnD of landmarks ----------------
+
+                //prevent panning when a landmark is dragged
+                const onDragStart = (panControl: ArcballControls) => panControl.enabled = false;
+
+                const onMarkDragEnd = (event: THREE.Event, panControl: ArcballControls) => {
+                    //apply drag move to corresponding landmark
+                    landmarksManager.relocateMarkObj(event.object);
+                    if (typeof rtState.current.indexX != 'undefined'
+                        && typeof rtState.current.indexY != 'undefined'
+                        && typeof rtState.current.indexZ != 'undefined') {
+                        landmarksManager.showMarkBulletsBySlices([0, 1, 2], [rtState.current.indexX, rtState.current.indexY, rtState.current.indexZ]);
+                    }
+                    //reset highlighted landmarks
+                    setHighMarks([]);
+                    //re-enable paning
+                    panControl.enabled = true;
+                    renderAll();
+                }
+                const attachDragListeners = (dispatcher: EventDispatcher, panControl: ArcballControls) => {
+                    let listener: (e: THREE.Event) => void;
+
+                    listener = () => onDragStart(panControl);
+                    dispatcher.addEventListener('dragstart', listener);
+                    obj3d.current.listeners.push({ event: 'dragstart', listener, dispatcher });
+                    dispatcher.addEventListener('drag', renderAll);
+                    obj3d.current.listeners.push({ event: 'drag', listener: renderAll, dispatcher });
+                    listener = (e: THREE.Event) => onMarkDragEnd(e, panControl);
+                    dispatcher.addEventListener('dragend', listener);
+                    obj3d.current.listeners.push({ event: 'dragend', listener: onMarkDragEnd, dispatcher });
+                }
+
+                obj3d.current.dragCtrlX = new DragControls([], obj3d.current.camX, sliceXRendererContainer.current);
+                obj3d.current.sliceXCtrl && attachDragListeners(obj3d.current.dragCtrlX, obj3d.current.sliceXCtrl);
+                obj3d.current.dragCtrlY = new DragControls([], obj3d.current.camY, sliceYRendererContainer.current);
+                obj3d.current.sliceYCtrl && attachDragListeners(obj3d.current.dragCtrlY, obj3d.current.sliceYCtrl);
+                obj3d.current.dragCtrlZ = new DragControls([], obj3d.current.camZ, sliceZRendererContainer.current);
+                obj3d.current.sliceZCtrl && attachDragListeners(obj3d.current.dragCtrlZ, obj3d.current.sliceZCtrl);
+                //-----------------------------------------------------------------
+
+                initBrainModel(obj3d.current.scene, mriBbox.max.toArray(), false);
+                setBrainModelMode(clipBrainModel === StAtm.ClipBrainModelMode.None ? StAtm.BrainModelMode.Wire : StAtm.BrainModelMode.Clipped);
+
+                //-- controls for main view (no gizmos)
+                const controls = new ArcballControls(obj3d.current.camera, obj3d.current.renderer.domElement);
+
+                controls.addEventListener('change', onCameraChanged);
+                obj3d.current.listeners.push({ event: 'change', listener: onCameraChanged, dispatcher: controls });
+
+                obj3d.current.controls = controls;
+
+                controls.minDistance = 50;
+                controls.maxDistance = 500;
+                controls.enablePan = false;
             }
-            if (obj3d.current.rendY) {
-                const sliceCtrl = new ArcballControls(obj3d.current.camY, obj3d.current.rendY.domElement);
-                sliceCtrl.enableRotate = false;
-                sliceCtrl.addEventListener('change', renderSliceY);
-                obj3d.current.listeners.push({ event: 'change', listener: renderSliceY, dispatcher: sliceCtrl });
-                obj3d.current.sliceYCtrl = sliceCtrl;
-            }
-            if (obj3d.current.rendZ) {
-                const sliceCtrl = new ArcballControls(obj3d.current.camZ, obj3d.current.rendZ.domElement);
-                sliceCtrl.enableRotate = false;
-                sliceCtrl.addEventListener('change', renderSliceZ);
-                obj3d.current.listeners.push({ event: 'change', listener: renderSliceZ, dispatcher: sliceCtrl });
-                obj3d.current.sliceZCtrl = sliceCtrl;
-            }
-            //-----------------------------------------------------------------
 
-            //-- controls for 2D slice view : DnD of landmarks ----------------
-
-            //prevent panning when a landmark is dragged
-            const onDragStart = (panControl: ArcballControls) => panControl.enabled = false;
-
-            const onMarkDragEnd = (event: THREE.Event, panControl: ArcballControls) => {
-                //apply drag move to corresponding landmark
-                landmarksManager.relocateMarkObj(event.object);
-                landmarksManager.showMarkBulletsBySlices([0, 1, 2], [rtState.current.indexX, rtState.current.indexY, rtState.current.indexZ]);
-                //rerset highlighted landmarks
-                setHighMarks([]);
-                //reanable paning
-                panControl.enabled = true;
-                renderAll();
-            }
-            const attachDragListeners = (dispatcher: EventDispatcher, panControl: ArcballControls) => {
-                let listener: (e: THREE.Event) => void;
-
-                listener = () => onDragStart(panControl);
-                dispatcher.addEventListener('dragstart', listener);
-                obj3d.current.listeners.push({ event: 'dragstart', listener, dispatcher });
-                dispatcher.addEventListener('drag', renderAll);
-                obj3d.current.listeners.push({ event: 'drag', listener: renderAll, dispatcher });
-                listener = (e: THREE.Event) => onMarkDragEnd(e, panControl);
-                dispatcher.addEventListener('dragend', listener);
-                obj3d.current.listeners.push({ event: 'dragend', listener: onMarkDragEnd, dispatcher });
-            }
-
-            obj3d.current.dragCtrlX = new DragControls([], obj3d.current.camX, sliceXRendererContainer.current);
-            obj3d.current.sliceXCtrl && attachDragListeners(obj3d.current.dragCtrlX, obj3d.current.sliceXCtrl);
-            obj3d.current.dragCtrlY = new DragControls([], obj3d.current.camY, sliceYRendererContainer.current);
-            obj3d.current.sliceYCtrl && attachDragListeners(obj3d.current.dragCtrlY, obj3d.current.sliceYCtrl);
-            obj3d.current.dragCtrlZ = new DragControls([], obj3d.current.camZ, sliceZRendererContainer.current);
-            obj3d.current.sliceZCtrl && attachDragListeners(obj3d.current.dragCtrlZ, obj3d.current.sliceZCtrl);
-            //-----------------------------------------------------------------
-
-            initBrainModel(obj3d.current.scene, mriBbox.max.toArray(), false);
-            setBrainModelMode(clipBrainModel === StAtm.ClipBrainModelMode.None ? StAtm.BrainModelMode.Wire : StAtm.BrainModelMode.Clipped);
-
-            //-- controls for main view
-            const controls = new ArcballControls(obj3d.current.camera, obj3d.current.renderer.domElement, obj3d.current.scene);
-
-            controls.addEventListener('change', onCameraChanged);
-            obj3d.current.listeners.push({ event: 'change', listener: onCameraChanged, dispatcher: controls });
-
-            obj3d.current.controls = controls;
-
-            controls.minDistance = 50;
-            controls.maxDistance = 500;
-            controls.enablePan = false;
         }
     };
 
     const initSceneAfterVolumeLoaded = () => {
-
-        // second renderer in an inset to display main view axis orientation 
-        const { insetScene: scene2, insetCamera: camera2 } = setupInset(obj3d.current.aspect2, obj3d.current.camera);
-        obj3d.current.camera2 = camera2;
-        obj3d.current.scene2 = scene2;
-
+        if (obj3d.current.camera && obj3d.current.aspect2) {
+            // second renderer in an inset to display main view axis orientation 
+            const { insetScene: scene2, insetCamera: camera2 } = setupInset(obj3d.current.aspect2, obj3d.current.camera);
+            obj3d.current.camera2 = camera2;
+            obj3d.current.scene2 = scene2;
+        }
     };
     //---------------------------------------------------------------------
 
-    const refreshNormPointer = (container: HTMLDivElement, clientX: number, clientY: number) => {
+    const refreshNormPointer = (container: Element, clientX: number, clientY: number) => {
         const rect = container.getBoundingClientRect();
         rtState.current.normPointer.x = rect ? (((clientX - rect.left) / rect.width) * 2 - 1) : 0;
         rtState.current.normPointer.y = rect ? (- ((clientY - rect.top) / rect.height) * 2 + 1) : 0;
@@ -1441,20 +1553,19 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const onRendererClick = (
         event: React.MouseEvent<HTMLDivElement, MouseEvent>,
-        container: HTMLDivElement,
         camera: THREE.OrthographicCamera | undefined,
-        layerChannel: number | undefined = undefined,
     ) => {
         if (obj3d.current.scene && landmarksManager && camera) {
+            refreshNormPointer(event.currentTarget, event.clientX, event.clientY);
             if (event.shiftKey) {
 
                 //refresh highlighted bullets, and optionally create new one
 
-                refreshNormPointer(container, event.clientX, event.clientY);
                 const res = landmarksManager.processPicking(
                     rtState.current.normPointer,
                     camera,
                     obj3d.current.scene,
+                    PickingMode.LandmarkCreation,
                     (
                         (nextLandmarkId != '')
                             ?
@@ -1473,9 +1584,21 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 );
 
                 res.modified && renderAll();
-            } else {
+            } else if (event.altKey) {
+
                 //refresh highlighted bullets, and update slices' indexes 
-                console.log('clicked', obj3d.current.scene.children);
+                const res = landmarksManager.processPicking(
+                    rtState.current.normPointer,
+                    camera,
+                    obj3d.current.scene,
+                    PickingMode.SlicesSelection,
+                );
+                if (res.indices) {
+                    setIndexX(res.indices[0]);
+                    setIndexY(res.indices[1]);
+                    setIndexZ(res.indices[2]);
+                }
+
             }
         }
     };
@@ -1483,15 +1606,14 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const onRendererMouseMove = (
         event: React.MouseEvent<HTMLDivElement, MouseEvent>,
-        container: HTMLDivElement,
         camera: THREE.OrthographicCamera | undefined,
     ) => {
         if (obj3d.current.scene && landmarksManager && camera) {
-            refreshNormPointer(container, event.clientX, event.clientY);
+            refreshNormPointer(event.currentTarget, event.clientX, event.clientY);
             const res = landmarksManager.processPicking(
                 rtState.current.normPointer,
-
                 camera, obj3d.current.scene,
+                PickingMode.Hovering,
             );
             if (res.modified) {
                 const highlighted: string[] = [];
@@ -1507,6 +1629,217 @@ const VolumePreview = (props: VolumePreviewProps) => {
     };
 
 
+    const showISlices = [showXSlice, showYSlice, showZSlice];
+
+    const nbShown = (showXSlice ? 1 : 0) + (showYSlice ? 1 : 0) + (showZSlice ? 1 : 0);
+
+
+    /* Note:  moving slice views in the UI can not be achieved simply by changing parent of their renderer container in the grid.
+     * Indeed, React reconciliation heuristic would fail, and renderer dom elements (created by ThreeJS) would
+     * appear staying in place and swaping parents beteween renders...
+     * Hence the need of placeholders and position updates of actual renderer containers.
+     */
+    const Slice2DViews =
+        <div
+            style={{
+                visibility: (viewMode === StAtm.ViewMode.Slice2D ? 'visible' : 'hidden'),
+                position: 'absolute',
+                width: '100%', height: '100%',
+            }}
+        >
+
+            <div
+                style={{
+                    visibility: (viewMode === StAtm.ViewMode.Slice2D ? 'visible' : 'hidden'),
+                    display: 'grid',
+                    position: 'absolute',
+                    width: '100%', height: '100%',
+                    gridTemplateColumns: '33% 33% 34%',
+                    gridTemplateRows: '50% 50%',
+                    gap: '1px 3px',
+                    overflow: 'hidden',
+                    backgroundColor: 'silver',
+                }}
+            >
+
+                <div
+                    ref={sliceRendPlaceholder1}
+                    style={{
+                        ...(nbShown == 1
+                            ?
+                            //use all available space when only one slice is shown 
+                            {
+                                gridColumn: '1 / 4',
+                                gridRow: '1 / 3',
+                            }
+                            :
+                            {
+                                gridColumn: '1 / 3',
+                                gridRow: '1 / 3',
+                            }
+                        )
+
+                    }}
+                />
+
+                <div
+                    style={{
+                        visibility: (viewMode === StAtm.ViewMode.Slice2D && nbShown > 1) ? 'visible' : 'hidden',
+                        ...(nbShown == 2
+                            ?
+                            //use all space in 2nd column when 2 slices are shown 
+                            {
+                                gridColumn: '3',
+                                gridRow: '1 / 3',
+                            }
+                            :
+                            {
+                                gridColumn: '3',
+                                gridRow: '1',
+                            }
+                        )
+                    }}
+                >
+                    <div
+                        ref={sliceRendPlaceholder2}
+                        style={{
+                            position: 'relative',
+                            height: '100%',
+                            width: '100%',
+                        }}
+                    >
+                        <div
+                            style={{ position: 'absolute', top: 1, left: 1, color: '#FFF', zIndex: 20 }}
+                            title="expand this slice view"
+                        >
+                            <Icon
+                                icon='zoom-to-fit'
+                                onClick={() => {
+                                    //swap positions of 1rst and 2nd slice viewers 
+                                    if (nbShown > 2) {
+                                        setSliceRendPosIndices([
+                                            sliceRendPosIndices[1],
+                                            sliceRendPosIndices[0],
+                                            sliceRendPosIndices[2]
+                                        ]);
+
+                                    } else {
+                                        //exclude non-visible slices 
+                                        const sorted = sliceRendPosIndices
+                                            .map((plane, index) => ({
+                                                plane,
+                                                index,
+                                                visible: showISlices[plane]
+                                            }))
+                                            .sort(
+                                                (a, b) => {
+                                                    if (a.visible && !b.visible) {
+                                                        return -1;
+                                                    }
+                                                    else if (!a.visible && b.visible) {
+                                                        return 1;
+                                                    } else {
+                                                        return a.index - b.index
+                                                    }
+                                                }
+                                            )
+                                            .map(s => s.plane)
+                                            ;
+
+                                        setSliceRendPosIndices([
+                                            sorted[1],
+                                            sorted[0],
+                                            sorted[2]
+                                        ]);
+
+                                    }
+                                }
+                                }
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    style={{
+                        visibility: (viewMode === StAtm.ViewMode.Slice2D && nbShown > 2) ? 'visible' : 'hidden',
+
+                        gridColumn: '3',
+                        gridRow: '2 ',
+                    }}
+                >
+                    <div
+                        ref={sliceRendPlaceholder3}
+                        style={{
+                            position: 'relative',
+                            height: '100%',
+                            width: '100%',
+                        }}
+                    >
+                        <div
+                            style={{ position: 'absolute', top: 1, left: 1, color: '#FFF', zIndex: 20 }}
+                            title="expand this slice view"
+                        >
+                            <Icon
+                                icon='zoom-to-fit'
+                                onClick={() =>
+                                    //swap positions of 1rst and 3rd slice viewers 
+
+                                    setSliceRendPosIndices([
+                                        sliceRendPosIndices[2],
+                                        sliceRendPosIndices[1],
+                                        sliceRendPosIndices[0],
+                                    ])
+                                } />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div
+                ref={sliceZRendererContainer}
+                className='sliceRendererContainer'
+                style={{
+                    position: 'absolute',
+                    visibility: (viewMode === StAtm.ViewMode.Slice2D && showZSlice) ? 'visible' : 'hidden',
+                }}
+                onClick={(event) =>
+                    onRendererClick(event, obj3d.current.camZ)
+                }
+                onMouseMove={(event) =>
+                    onRendererMouseMove(event, obj3d.current.camZ)
+                }
+            />
+            <div
+                ref={sliceYRendererContainer}
+                className='sliceRendererContainer'
+                style={{
+                    position: 'absolute',
+                    visibility: (viewMode === StAtm.ViewMode.Slice2D && showYSlice) ? 'visible' : 'hidden',
+                }}
+                onClick={(event) =>
+                    onRendererClick(event, obj3d.current.camY)
+                }
+                onMouseMove={(event) =>
+                    onRendererMouseMove(event, obj3d.current.camY)
+                }
+            />
+            <div
+                ref={sliceXRendererContainer}
+                className='sliceRendererContainer'
+                style={{
+                    position: 'absolute',
+                    visibility: (viewMode === StAtm.ViewMode.Slice2D && showXSlice) ? 'visible' : 'hidden',
+                }}
+                onClick={(event) =>
+                    onRendererClick(event, obj3d.current.camX)
+                }
+                onMouseMove={(event) =>
+                    onRendererMouseMove(event, obj3d.current.camX)
+                }
+            />
+
+        </div>;
 
 
     return (
@@ -1606,11 +1939,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                             ref={volRendererContainer}
                             onClick={(event) =>
-                                volRendererContainer.current && onRendererClick(event, volRendererContainer.current, obj3d.current.camera)
+                                onRendererClick(event, obj3d.current.camera)
                             }
-                            onMouseMove={(event) => {
-                                volRendererContainer.current && onRendererMouseMove(event, volRendererContainer.current, obj3d.current.camera)
-                            }}
+                            onMouseMove={(event) =>
+                                onRendererMouseMove(event, obj3d.current.camera)
+                            }
                         >
                         </div>
                         <div
@@ -1631,64 +1964,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         >
                         </div>
                         {/* 2D slices views */}
-                        <div
-                            style={{
-                                visibility: (viewMode === StAtm.ViewMode.Slice2D ? 'visible' : 'hidden'),
-                                display: 'grid',
-                                position: 'absolute',
-                                width: '100%', height: '100%',
-                                gridTemplateColumns: '66% 34%',
-                                gridTemplateRows: '50% 50%',
-                                gap: '1px 3px',
-                                overflow: 'hidden',
-                                backgroundColor: 'silver',
-                            }}
-                        >
-                            <div
-                                ref={sliceZRendererContainer}
-                                style={{
-                                    gridColumn: '1',
-                                    gridRow: '1 / 3',
-                                }}
-                                onClick={(event) =>
-                                    sliceZRendererContainer.current && onRendererClick(event, sliceZRendererContainer.current, obj3d.current.camZ, 3)
-                                }
-                                onMouseMove={(event) => {
-                                    sliceZRendererContainer.current && onRendererMouseMove(event, sliceZRendererContainer.current, obj3d.current.camZ)
-                                }}
-
-                            >
-                            </div>
-                            <div
-                                ref={sliceXRendererContainer}
-                                style={{
-                                    gridColumn: '2',
-                                    gridRow: '1',
-                                }}
-                                onClick={(event) =>
-                                    sliceXRendererContainer.current && onRendererClick(event, sliceXRendererContainer.current, obj3d.current.camX, 1)
-                                }
-                                onMouseMove={(event) => {
-                                    sliceXRendererContainer.current && onRendererMouseMove(event, sliceXRendererContainer.current, obj3d.current.camX)
-                                }}
-
-                            ></div>
-                            <div
-                                ref={sliceYRendererContainer}
-                                style={{
-                                    gridColumn: '2',
-                                    gridRow: '2 ',
-                                }}
-                                onClick={(event) =>
-                                    sliceYRendererContainer.current && onRendererClick(event, sliceYRendererContainer.current, obj3d.current.camY, 2)
-                                }
-                                onMouseMove={(event) => {
-                                    sliceYRendererContainer.current && onRendererMouseMove(event, sliceYRendererContainer.current, obj3d.current.camY)
-                                }}
-
-                            ></div>
-                        </div>
-
+                        {Slice2DViews}
 
                         {obj3d.current.volume
                             ?
@@ -1745,7 +2021,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     </div>
                 </ResizeSensor2>
 
-                <PreviewControls />
+                <PreviewControls volumeFile={props.volumeFile} />
 
             </div >
 

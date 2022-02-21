@@ -16,6 +16,7 @@ import * as StAtm from '../StateAtoms';
 import { RegistrationTask } from "../RegistrationTaskHandler";
 
 type ActionControlsProps = {
+    volumeFile: StAtm.LoadedVolumeFile | undefined,
 };
 
 const ActionControls = (props: ActionControlsProps) => {
@@ -44,37 +45,40 @@ const ActionControls = (props: ActionControlsProps) => {
                     icon="confirm"
                     disabled={!props.volumeFile || (remoteTask && remoteTask.hasStarted())}
                     onClick={() => {
-                        const params = { rotation: deltaRotation.slice(0, 3) };
-                        const task = RegistrationTask.create(
-                            props.volumeFile?.file,
-                            params,
-                            (task) => {
-                                setRemoteTask(task);
-                                if (!task) {
+                        if (props.volumeFile?.file) {
+                            const params = { rotation: deltaRotation.slice(0, 3) };
+                            const task = RegistrationTask.create(
+                                props.volumeFile.file,
+                                params,
+                                (task) => {
+                                    setRemoteTask(task);
+                                    if (!task) {
+                                        setShowLogs(false);
+                                    }
+                                },
+                                (lines: string[]) => setLoglines(lines),
+                                (iserror, event, error) => {
+                                    if (iserror) {
+                                        setAlertMessage(
+                                            <p>
+                                                Registration aborted!
+                                                {error? <pre>{error}</pre> : null}
+                                            </p>);
+                                        task.taskStatus = 'aborted';
+                                    } else {
+                                        setAlertMessage(
+                                            <p>
+                                                Registration done!
+                                            </p>);
+                                        task.taskStatus = 'done';
+                                    }
                                     setShowLogs(false);
-                                }
-                            },
-                            (lines: string[]) => setLoglines(lines),
-                            (iserror, event) => {
-                                if (iserror) {
-                                    setAlertMessage(
-                                        <p>
-                                            Registration aborted!
-                                        </p>);
-                                    task.taskStatus = 'aborted';
-                                } else {
-                                    setAlertMessage(
-                                        <p>
-                                            Registration done!
-                                        </p>);
-                                    task.taskStatus = 'done';
-                                }
-                                setShowLogs(false);
-                            },
+                                },
 
-                        );
-                        setRemoteTask(task)
-                        setShowLogs(true);
+                            );
+                            setRemoteTask(task)
+                            setShowLogs(true);
+                        }
                     }} >Register</Button>
 
                 <br />

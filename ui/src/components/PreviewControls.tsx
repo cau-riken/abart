@@ -20,6 +20,7 @@ import OrientControls from "./OrientControls";
 
 
 type PreviewControlsProps = {
+    volumeFile: StAtm.LoadedVolumeFile | undefined,
 };
 
 const PreviewControls = (props: PreviewControlsProps) => {
@@ -158,7 +159,7 @@ const PreviewControls = (props: PreviewControlsProps) => {
                 </div>
             </div>
 
-            <ActionControls />
+            <ActionControls volumeFile={props.volumeFile}/>
 
         </div>
     );

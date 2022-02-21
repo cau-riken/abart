@@ -12,3 +12,7 @@
     height: 60px;
     width: 130px;
 }
+
+.sliceRendererContainer {
+   transition: left 0.2s ease-in, top 0.2s ease-in, width 0.2s ease-in, height 0.2s ease-in;
+}

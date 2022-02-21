@@ -48,7 +48,7 @@ export class RegistrationTask {
         volumeFile: File, taskParams: TaskParams,
         onSubmitted: (task?: RegistrationTask) => void,
         loglines: (lines: string[]) => void,
-        onDone: (iserror: boolean, event: Event) => void,
+        onDone: (iserror: boolean, event: Event|undefined, error?: string) => void,
     ): RegistrationTask {
 
         const task = new RegistrationTask(taskParams);
@@ -67,7 +67,7 @@ export class RegistrationTask {
                     //console.log(event.data);
                 };
                 logMsgSocket.onclose = function (event) {
-                    console.log("logMsgSocket.onclose", event);
+                    console.debug("logMsgSocket.onclose", event);
 
                     //new to check status to know if Task completed succesfully or was canceled
                     task.refreshStatus()
@@ -79,8 +79,8 @@ export class RegistrationTask {
 
                 };
                 logMsgSocket.onerror = function (event) {
-                    console.log("logMsgSocket.onerror", event);
-                    onDone(true, event);
+                    console.debug("logMsgSocket.onerror", event);
+                    onDone(true, undefined, event.toString());
                 };
 
             }, 10);
@@ -89,6 +89,7 @@ export class RegistrationTask {
             .catch(function (error) {
                 onSubmitted(undefined);
                 console.log(error);
+                onDone(true, undefined, error.toString());
             });
 
         return task;
