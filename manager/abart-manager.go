@@ -19,6 +19,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
+	"github.com/go-gl/mathgl/mgl64"
+
 	"rikencau/abart-manager/dockerhandler"
 )
 
@@ -128,11 +130,28 @@ func makeTransformMatrix(paramsJson string, matrixFilePath string) bool {
 
 	} else {
 
-		transform := fmt.Sprintf(
-			"Transform: Euler3DTransform_double_3_3\nParameters:  %f %f %f  0 0 0 FixedParameters: 0 0 0 0\n",
-			p.Rotation[0], p.Rotation[1], p.Rotation[2],
-		)
-		err := os.WriteFile(matrixFilePath, []byte(transform), 0644)
+		xroll := p.Rotation[0]
+		yroll := p.Rotation[1]
+		zroll := p.Rotation[2]
+		//get the transformation matrix
+		rotated := mgl64.Ident3().Mul3(mgl64.Rotate3DX(xroll)).Mul3(mgl64.Rotate3DY(yroll)).Mul3(mgl64.Rotate3DZ(zroll))
+
+		//fmt.Printf("%+v", rotated)
+		var sb strings.Builder
+		sb.WriteString("Transform: AffineTransform_double_3_3\n")
+		sb.WriteString("Parameters:")
+		for r := 0; r < 3; r++ {
+			for c := 0; c < 3; c++ {
+				fmt.Fprintf(&sb, " %f", rotated.At(r, c))
+			}
+			sb.WriteString(" ")
+		}
+		//translation (?)
+		sb.WriteString(" 0 0 0\n")
+		//origin
+		sb.WriteString("FixedParameters: 0 0 0\n")
+
+		err := os.WriteFile(matrixFilePath, []byte(sb.String()), 0644)
 
 		if err != nil {
 			//could not create file

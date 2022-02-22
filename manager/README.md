@@ -9,7 +9,7 @@ It create sibling docker container on-demand for the actual registration process
 This 2 stage Dockerfile will build the manager from sources within a transient container
 
 ```sh
-sudo docker build  --force-rm --no-cache -f Dockerfile.build -t rikencau/abart-manager .
+sudo docker build  --force-rm --no-cache -f Dockerfile.manager -t rikencau/abart-manager .
 ```
 
 ## Run Manager 
