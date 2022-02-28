@@ -24,10 +24,8 @@ const MarmosetLandMarks: LandMark[] = [
 ];
 
 export type LoadedVolumeFile = {
-    file: File | undefined,
+    fileOrBlob: File | Blob | undefined,
     name: string,
-    ext: string,
-    data: string | ArrayBuffer | undefined
 };
 
 export enum ViewMode {
@@ -59,6 +57,7 @@ export enum CameraPOV {
     Inferior,
 }
 
+export const volumeFile = atom<LoadedVolumeFile|undefined>(undefined);
 
 export const isLoading = atom(false);
 export const volumeLoaded = atom(false);

@@ -1,13 +1,14 @@
 import * as React from "react";
+import { useAtom } from "jotai";
 
 import {
     FileInput,
     FocusStyleManager,
 } from "@blueprintjs/core";
 
+import * as StAtm from '../StateAtoms';
 
 import VolumePreview from "./VolumePreview"
-import { LoadedVolumeFile } from "./VolumePreview"
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
@@ -33,13 +34,12 @@ type UIMainProps = {
 const UIMain = (props: UIMainProps) => {
 
     const loadLocalVolumeFile = (file: File) => {
-        //excerpt from https://slicedrop.com/js/x.rendering.js
 
         if (volumeFile) {
-            volumeFile.file = undefined;
-            volumeFile.data = undefined;
+            volumeFile.fileOrBlob = undefined;
         }
         setVolumeFile(undefined);
+        setRemoteTask(undefined);
 
         const fileName = file.name;
         const fileExt = fileName.toUpperCase().split('.').pop();
@@ -58,36 +58,23 @@ const UIMain = (props: UIMainProps) => {
         //const volumeExtensions = ['NRRD', 'MGZ', 'MGH', 'NII', 'GZ', 'DCM', 'DICOM'];
         const volumeExtensions = ['NII', 'GZ'];
         const seemsValidFile = (volumeExtensions.indexOf(fileExtension) >= 0);
+        if (seemsValidFile) {
+            setVolumeFile({
+                fileOrBlob: file,
+                name: fileName,
+            });
 
-
-        //HTML5 File Reader 
-        const reader = new FileReader();
-        reader.onerror = (e) => {
-            console.log('Error:' + e.target.error.code);
-        };
-
-        reader.onload = (e) => {
-            // reading complete
-            const rawVolumeData = e.target.result;
-            setVolumeFile(
-                {
-                    file: file,
-                    name: fileName,
-                    ext: fileExtension,
-                    data: rawVolumeData
-                }
-            );
-
-        };
-
-        //start loading
-        reader.readAsArrayBuffer(file);
+        } else {
+            setAlertMessage(<span>The selected file doesn't seem to be a valid NIfTI file.</span>)
+        }
 
     };
 
 
-    const [isWebGlEnabled, setWebGlEnabled] = React.useState<boolean | null>();
-    const [volumeFile, setVolumeFile] = React.useState<LoadedVolumeFile>();
+    const [isWebGlEnabled, setWebGlEnabled] = React.useState<boolean>();
+    const [volumeFile, setVolumeFile] = useAtom(StAtm.volumeFile);
+    const [, setRemoteTask] = useAtom(StAtm.remoteTask);
+    const [, setAlertMessage] = useAtom(StAtm.alertMessage);
 
 
     React.useEffect(() => {
@@ -117,18 +104,16 @@ const UIMain = (props: UIMainProps) => {
             <div
             >
                 <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
-                    <VolumePreview
-                        volumeFile={volumeFile}
-                    />
+                    <VolumePreview />
                 </div>
                 <FileInput
                     style={{ position: 'absolute' }}
                     text={volumeFile ? volumeFile.name : "Choose file..."}
-                    onInputChange={(e) => {
+                    onInputChange={(e: React.FormEvent<HTMLInputElement>) => {
 
-                        if (e?.target?.files) {
-                            if (e.target.files.length) {
-                                const selectedFile = e.target.files[0];
+                        if (e?.currentTarget?.files) {
+                            if (e.currentTarget.files.length) {
+                                const selectedFile = e.currentTarget.files[0];
 
                                 loadLocalVolumeFile(selectedFile);
                                 //console.log("onInputChange selectedFile:", selectedFile);

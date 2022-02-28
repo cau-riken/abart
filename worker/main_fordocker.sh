@@ -19,6 +19,6 @@ fi
 echo $ret > finished
 
 #archiving results
-zip -r -Z store registered.zip register/
+zip -r abartResults.zip results/
 
 exit $ret

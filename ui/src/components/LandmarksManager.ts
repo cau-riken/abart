@@ -217,10 +217,8 @@ class LandmarksManager {
     };
 
     createLandmark(landmarkId: string, color: string, coord: number[]) {
-        console.log('Add Mark', landmarkId, coord);
         const [i, j, k, x, y, z] = this.pointToSliceIndexes(coord);
         const indices = [i, j, k]
-        console.log('   ', indices, [x, y, z]);
         const mark = LandmarksManager.createLandmarkObj(coord, color);
         const instanceId = mark.uuid;
         this.marksGroup.add(mark);

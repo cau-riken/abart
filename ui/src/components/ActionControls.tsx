@@ -1,7 +1,6 @@
 import * as React from "react";
 import { useAtom } from "jotai";
 
-
 import {
     AnchorButton,
     Button,
@@ -29,6 +28,8 @@ const ActionControls = (props: ActionControlsProps) => {
     const [showLogs, setShowLogs] = useAtom(StAtm.showLogs);
     const [, setLoglines] = useAtom(StAtm.loglines);
 
+    const [, setVolumeFile] = useAtom(StAtm.volumeFile);
+
     return (
         <div
             style={{
@@ -45,10 +46,10 @@ const ActionControls = (props: ActionControlsProps) => {
                     icon="confirm"
                     disabled={!props.volumeFile || (remoteTask && remoteTask.hasStarted())}
                     onClick={() => {
-                        if (props.volumeFile?.file) {
+                        if (props.volumeFile?.fileOrBlob && props.volumeFile.fileOrBlob instanceof File) {
                             const params = { rotation: deltaRotation.slice(0, 3) };
                             const task = RegistrationTask.create(
-                                props.volumeFile.file,
+                                props.volumeFile.fileOrBlob,
                                 params,
                                 (task) => {
                                     setRemoteTask(task);
@@ -62,9 +63,10 @@ const ActionControls = (props: ActionControlsProps) => {
                                         setAlertMessage(
                                             <p>
                                                 Registration aborted!
-                                                {error? <pre>{error}</pre> : null}
+                                                {error ? <pre>{error}</pre> : null}
                                             </p>);
                                         task.taskStatus = 'aborted';
+                                        setRemoteTask(undefined);
                                     } else {
                                         setAlertMessage(
                                             <p>
@@ -83,23 +85,52 @@ const ActionControls = (props: ActionControlsProps) => {
 
                 <br />
 
-                <Button
-                    icon="delete"
-                    disabled={!remoteTask || !remoteTask.hasStarted() || remoteTask.hasFinished()}
-                    onClick={() => {
-                        const updatedTask = remoteTask?.cancel(
-                            () => {
-                                setRemoteTask(undefined);
-                                setShowLogs(false);
-                            });
-                        setRemoteTask(updatedTask);
-                    }} >Cancel</Button>
-                <AnchorButton
-                    icon="archive"
-                    disabled={!remoteTask || !remoteTask.hasFinished()}
-                    href={remoteTask ? remoteTask?.getDownloadResultUrl() : ""}
-                    target="_blank"
-                >Download</AnchorButton>
+                {remoteTask && remoteTask.hasStarted() && !remoteTask.hasFinished()
+                    ?
+                    <Button
+                        icon="delete"
+                        disabled={!remoteTask || !remoteTask.hasStarted() || remoteTask.hasFinished()}
+                        onClick={() => {
+                            const updatedTask = remoteTask?.cancel(
+                                () => {
+                                    setRemoteTask(undefined);
+                                    setShowLogs(false);
+                                });
+                            setRemoteTask(updatedTask);
+                        }} >Cancel</Button>
+                    :
+                    null
+                }
+
+                {remoteTask && remoteTask.hasFinished() && remoteTask.taskStatus === 'done'
+                    ?
+                    <Button
+                        icon="eye-open"
+                        disabled={!remoteTask || !remoteTask.hasFinished()}
+                        onClick={() => {
+                            remoteTask.downloadRegistered(
+                                (name, data) => {
+                                    setVolumeFile({
+                                        fileOrBlob: data,
+                                        name,
+                                    });
+                                }
+                            );
+                        }} >Preview</Button>
+                    :
+                    null
+                }
+
+                {remoteTask && remoteTask.hasFinished() && remoteTask.taskStatus === 'done'
+                    ?
+                    <AnchorButton
+                        icon="archive"
+                        disabled={!remoteTask || !remoteTask.hasFinished()}
+                        href={remoteTask ? remoteTask?.getDownloadResulstUrl() : ""}
+                        target="_blank"
+                    >Download</AnchorButton>
+                    :
+                    null}
 
             </div>
             <div style={{ height: 10, margin: "4px 6px", padding: "0 10px" }}>

@@ -51,7 +51,6 @@ type ListenerInfo = {
 }
 
 type VolumePreviewProps = {
-    volumeFile: StAtm.LoadedVolumeFile | undefined,
 };
 
 const setupInset = (insetAspect: number, camera: THREE.Camera) => {
@@ -159,6 +158,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const [isLoading, setIsLoading] = useAtom(StAtm.isLoading);
     const [volumeLoaded, setVolumeLoaded] = useAtom(StAtm.volumeLoaded);
+    const [volumeFile, ] = useAtom(StAtm.volumeFile);
 
     const [alertMessage, setAlertMessage] = useAtom(StAtm.alertMessage);
 
@@ -633,7 +633,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         setMarkInstances(new Map());
 
-        if (props.volumeFile) {
+        if (volumeFile && volumeFile?.fileOrBlob) {
 
             setIsLoading(true);
 
@@ -657,7 +657,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             //url modifier to allow manager to read already loaded file 
             manager.setURLModifier((url) => {
                 if (url == SELECTED_FILE_FAKEURL) {
-                    url = URL.createObjectURL(props.volumeFile?.file);
+                    url = URL.createObjectURL(volumeFile?.fileOrBlob);
                     objectURLs.current.push(url);
                 }
                 return url;
@@ -707,7 +707,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         }
 
 
-    }, [props.volumeFile]
+    }, [volumeFile]
     );
 
     const adjustSliceCamOnResize = (
@@ -2064,7 +2064,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     </div>
                 </ResizeSensor2>
 
-                <PreviewControls volumeFile={props.volumeFile} />
+                <PreviewControls volumeFile={volumeFile} />
 
             </div >
 

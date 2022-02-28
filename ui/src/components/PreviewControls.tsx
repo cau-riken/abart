@@ -78,7 +78,11 @@ const PreviewControls = (props: PreviewControlsProps) => {
                             panel={
                                 <>
                                     {orientControls}
-                                    <div>
+                                    <div
+                                        style={{
+                                            marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
+                                        }}
+                                    >
                                         <Switch
                                             checked={castIso}
                                             disabled={!volumeLoaded}

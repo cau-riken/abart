@@ -67,9 +67,9 @@ export class RegistrationTask {
                     //console.log(event.data);
                 };
                 logMsgSocket.onclose = function (event) {
-                    console.debug("logMsgSocket.onclose", event);
+                    //console.debug("logMsgSocket.onclose", event);
 
-                    //new to check status to know if Task completed succesfully or was canceled
+                    //Need to check status to know if Task completed succesfully or was canceled
                     task.refreshStatus()
                         .then(
                             () => onDone(!task.hasFinished(), event)
@@ -175,8 +175,25 @@ export class RegistrationTask {
             });
     };
 
-    getDownloadResultUrl() {
-        return RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/result';
+    downloadRegistered(onDownloaded: (filename:string, data: blob) => void) {
+        return axios({
+              url: RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/results/registered',
+              method: 'GET',
+              responseType: 'blob', 
+            }).then((response) => {
+                let filename = response.headers['content-disposition']?.split(/;\s+filename=/)[1];
+                if (!filename) {
+                    filename = 'result.nii'
+                }
+                onDownloaded?.call(null, filename, response.data);
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
+    };
+
+    getDownloadResulstUrl() {
+        return RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/results/all';
     };
 
 }

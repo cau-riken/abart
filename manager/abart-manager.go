@@ -462,9 +462,9 @@ func (api *TaskApiImpl) createTask(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Parameters : %+v\n", paramsJson)
 	task.params = paramsJson
-	matrixFilePath := "initialTransform.tfm"
-	if makeTransformMatrix(paramsJson, path.Join(task.workdir, matrixFilePath)) {
-		task.config.PreTransform = "../" + matrixFilePath
+	matrixFileName := "initialTransform.tfm"
+	if makeTransformMatrix(paramsJson, path.Join(task.workdir, matrixFileName)) {
+		task.config.PreTransform = matrixFileName
 	}
 
 	//rest of the process can be defered after the response is sent
@@ -508,7 +508,7 @@ func (api *TaskApiImpl) getTaskStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *TaskApiImpl) downloadResult(w http.ResponseWriter, r *http.Request) {
+func (api *TaskApiImpl) downloadResult(w http.ResponseWriter, r *http.Request, Filename string) {
 
 	fmt.Println("🟡🟡🟡🟡🟡 Endpoint Hit: download")
 	vars := mux.Vars(r)
@@ -519,8 +519,6 @@ func (api *TaskApiImpl) downloadResult(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	} else {
 
-		//file to be downloaded
-		Filename := "registered.zip"
 		Openfile, err := os.Open(path.Join(task.workdir, Filename))
 		//Close after function return
 		defer Openfile.Close()
@@ -538,13 +536,22 @@ func (api *TaskApiImpl) downloadResult(w http.ResponseWriter, r *http.Request) {
 		FileSize := strconv.FormatInt(FileStat.Size(), 10) //Get file size as a string
 
 		//set the headers
-		w.Header().Set("Content-Disposition", "attachment; filename="+Filename)
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Disposition")
+		w.Header().Set("Content-Disposition", "attachment; filename="+path.Base(Filename))
 		w.Header().Set("Content-Type", FileContentType)
 		w.Header().Set("Content-Length", FileSize)
 
 		Openfile.Seek(0, 0)  //reset the offset back to 0 since 1 buffer length bytes have been read from the file already
 		io.Copy(w, Openfile) //'Copy' the file to the client
 	}
+}
+
+func (api *TaskApiImpl) downloadResultsZip(w http.ResponseWriter, r *http.Request) {
+	api.downloadResult(w, r, "abartResults.zip")
+}
+
+func (api *TaskApiImpl) downloadResultsRegistered(w http.ResponseWriter, r *http.Request) {
+	api.downloadResult(w, r, "results/registered/UserToAtlas_Warped.nii.gz")
 }
 
 func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
@@ -736,7 +743,8 @@ func handleRequests() {
 	apiRouter.HandleFunc("/tasks/{taskId}/cancel", api.cancelTask).Methods("PUT", http.MethodOptions)
 	apiRouter.HandleFunc("/tasks/{taskId}/logs", api.followTaskLogs).Methods(http.MethodGet, http.MethodOptions)
 	apiRouter.HandleFunc("/tasks/{taskId}/status", api.getTaskStatus).Methods(http.MethodGet, http.MethodOptions)
-	apiRouter.HandleFunc("/tasks/{taskId}/result", api.downloadResult).Methods(http.MethodGet, http.MethodOptions)
+	apiRouter.HandleFunc("/tasks/{taskId}/results/registered", api.downloadResultsRegistered).Methods(http.MethodGet, http.MethodOptions)
+	apiRouter.HandleFunc("/tasks/{taskId}/results/all", api.downloadResultsZip).Methods(http.MethodGet, http.MethodOptions)
 
 	apiRouter.Use(corsHnd)
 
