@@ -12,6 +12,7 @@ import {
 
 import "./LandMarksList.scss";
 import { LandMark } from "./LandmarksManager";
+import Thumbnail from "./Thumbnail";
 
 type LandMarksListProps = {
     landmarkset: LandMark[],
@@ -43,6 +44,7 @@ const LandMarksList = (props: LandMarksListProps) => {
                     flexDirection: 'row',
                     justifyContent: 'space-between',
                     padding: '2px 6px',
+                    cursor: 'pointer',
                 }}
                 onClick={() => setIsOpen(!isOpen)}
             >
@@ -95,15 +97,33 @@ const LandMarksList = (props: LandMarksListProps) => {
                                     <Icon
                                         icon="map-marker"
                                         style={{ marginTop: 3 }} {...(isSet ? { color: lm.color } : {})}
-                                        onClick={() => props.onLandmarkFocus?.call(null, lm.id)}
                                     />
 
-                                    <span>{lm.name}</span>
-                                    <Tooltip2
-                                        content={lm.descr}
+                                    <span
+                                        title={isSet ? 'click to jump to slices' : ''}
+                                        className={isSet ? 'landmark-id' : ''}
+                                        onClick={() => props.onLandmarkFocus?.call(null, lm.id)}
+                                    >{lm.name}</span>
+
+                                    <Popover2
+                                        interactionKind="click"
+                                        placement="left"
+                                        hasBackdrop={true}
+                                        content={
+                                            <div style={{ width: 800, padding: 10, }}>
+                                                <p>Landmark : <span style={{ fontWeight: 'bold', }}>{lm.longname}</span></p>
+                                                <p>{lm.descr}</p>
+                                                <Thumbnail imagePath={`resources/landmark_${lm.id}.png`} />
+                                            </div>
+                                        }
                                     >
-                                        <span>{lm.longname}</span>
-                                    </Tooltip2>
+                                        <span className='landmark-descr' title='click for description'>
+                                            <Icon icon='info-sign' />
+                                        </span>
+                                    </Popover2>
+
+                                    <span>{lm.longname}</span>
+
                                     {isSet ? <span title="Delete landmark">
                                         <Icon
                                             icon="small-cross"

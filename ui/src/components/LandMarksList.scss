@@ -6,7 +6,7 @@
 
 .landmark-line {
     display: grid;
-    grid-template-columns: 24px 20px 100px 1fr 20px ;
+    grid-template-columns: 24px 20px 100px 20px 1fr 20px ;
     gap: 3px;
     border-top: dotted 1px #c0c0c047;
 }
@@ -14,4 +14,21 @@
 .landmark-line.landmark-high,
 .landmark-line:hover {
     background-color: #566266dd;
+}
+
+.landmark-line  .landmark-descr > span.bp3-icon {
+    opacity: 0.1;
+}
+.landmark-line  .landmark-descr:hover > span.bp3-icon  {
+    opacity: 1;
+}
+
+.landmark-line > .landmark-id {
+    border: 1px solid transparent;
+}
+
+
+.landmark-line > .landmark-id:hover {
+    border-color: #FFF;
+    cursor: crosshair; 
 }
