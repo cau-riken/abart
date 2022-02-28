@@ -7,19 +7,19 @@ import { LandMark, MarkInstance } from './components/LandmarksManager';
 
 const MarmosetLandMarks: LandMark[] = [
 
-    { id: 'ac', color: '#f1c40f', coord: [0, 25, -10], name: 'ac', longname: 'Anterior Commissure', descr: 'Mid-sagittal left point at start of ac in coronal view going from anterior to posterior.' },
+    { id: 'ac', color: '#f1c40f', coord: [ 0.5, 53.5, -9.5 ], name: 'ac', longname: 'Anterior Commissure', descr: 'Mid-sagittal point at start of ac in coronal view going from anterior to posterior.' },
 
-    { id: 'pc', color: '#9b59b6', coord: [0, -5, -10], name: 'pc', longname: 'Posterior Commissure', descr: 'Mid-sagittal left point at start of pc in coronal view going from anterior to posterior.' },
+    { id: 'pc', color: '#9b59b6', coord: [ 0.5, -11.5, 5.5 ], name: 'pc', longname: 'Posterior Commissure', descr: 'Mid-sagittal point at start of pc in coronal view going from anterior to posterior.' },
 
-    { id: 'cc-s', color: '#3498db', coord: [0, 0, 0], name: 'cc (start)', longname: 'Corpus Callosum', descr: 'Mid-sagittal left point at start of cc in coronal view going from anterior to posterior.' },
-    { id: 'cc-e', color: '#3498db', coord: [0, 0, 0], name: 'cc (end)', longname: 'Corpus Callosum', descr: 'Mid-sagittal left point at end of cc in coronal view going from anterior to posterior.' },
+    { id: 'cc-s', color: '#3498db', coord: [ 0.5, 95.5, 13.5 ], name: 'cc (start)', longname: 'Corpus Callosum', descr: 'Mid-sagittal point at start of cc in coronal view going from anterior to posterior.' },
+    { id: 'cc-e', color: '#3498db', coord: [ 0.5, -32.5, 26.5 ], name: 'cc (end)', longname: 'Corpus Callosum', descr: 'Mid-sagittal point at end of cc in coronal view going from anterior to posterior.' },
 
-    { id: 'MB-l', color: '#c0392b', coord: [0, 0, 0], name: 'MB (left)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the left MB in coronal view going from anterior to posterior.' },
-    { id: 'MB-r', color: '#c0392b', coord: [0, 0, 0], name: 'MB (right)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the right MB in coronal view going from anterior to posterior.' },
+    { id: 'MB-l', color: '#c0392b', coord: [ -8.5, 15.5, -40.5 ], name: 'MB (left)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the left MB in coronal view going from anterior to posterior.' },
+    { id: 'MB-r', color: '#c0392b', coord: [ 7.5, 15.5, -40.5 ], name: 'MB (right)', longname: 'Mammillary Body', descr: 'Center of the first appearance of the right MB in coronal view going from anterior to posterior.' },
 
-    { id: 'DLG-l', color: '#28b463', coord: [0, 0, 0], name: 'DLG (left)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the left DLG in coronal view, moving from anterior to posterior.' },
-    { id: 'DLG-r', color: '#28b463', coord: [0, 0, 0], name: 'DLG (right)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the right DLG in coronal view, moving from anterior to posterior.' },
-    { id: '4V-f', color: '#dc7633', coord: [20, -43, -10], name: '4V (fastigium)', longname: 'Fastigium of the fourth Ventricle', descr: 'Mid-saggital point of the fastigium of the fourth ventricle, identified in the sagittal plane.' },
+    { id: 'DLG-l', color: '#28b463', coord: [ -62.5, 11.5, -19.5 ], name: 'DLG (left)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the left DLG in coronal view, moving from anterior to posterior.' },
+    { id: 'DLG-r', color: '#28b463', coord: [ 60.5, 11.5, -19.5 ], name: 'DLG (right)', longname: 'Dorsal Lateral Geniculate Nucleus', descr: 'The point at the first appearance of the right DLG in coronal view, moving from anterior to posterior.' },
+    { id: '4V-f', color: '#dc7633', coord: [ -0.5, -86.5, -38.5 ], name: '4V (fastigium)', longname: 'Fastigium of the fourth Ventricle', descr: 'Mid-saggital point of the fastigium of the fourth ventricle, identified in the sagittal plane.' },
 
 ];
 

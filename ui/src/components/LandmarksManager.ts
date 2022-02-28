@@ -216,6 +216,27 @@ class LandmarksManager {
         );
     };
 
+    createLandmark(landmarkId: string, color: string, coord: number[]) {
+        console.log('Add Mark', landmarkId, coord);
+        const [i, j, k, x, y, z] = this.pointToSliceIndexes(coord);
+        const indices = [i, j, k]
+        console.log('   ', indices, [x, y, z]);
+        const mark = LandmarksManager.createLandmarkObj(coord, color);
+        const instanceId = mark.uuid;
+        this.marksGroup.add(mark);
+
+        //record newly created mark instance
+        this.markInstances.set(landmarkId,
+            {
+                landmarkId: landmarkId,
+                coord: [x, y, z],
+                indices: indices,
+                instanceId,
+            }
+        );
+        return instanceId;
+    }
+
     remove(landmarkId: string) {
         const markInstance = this.getMarkInstance(landmarkId);
         if (markInstance) {
@@ -385,28 +406,15 @@ class LandmarksManager {
                         modified = true;
                     }
 
-                    if (ntrsect.object?.userData?.isSlice && pickingMode!=PickingMode.Hovering) {
+                    if (ntrsect.object?.userData?.isSlice && pickingMode != PickingMode.Hovering) {
 
                         const [i, j, k, x, y, z] = this.pointToSliceIndexes(ntrsect.point.toArray());
                         if (createOptions) {
-                            const mark = LandmarksManager.createLandmarkObj([x, y, z], createOptions.color);
-                            const instanceId = mark.uuid;
-                            this.marksGroup.add(mark);
-
-                            //record newly created mark instance
-                            this.markInstances.set(createOptions.landmarkId,
-                                {
-                                    landmarkId: createOptions.landmarkId,
-                                    coord: [x, y, z],
-                                    indices: [i, j, k],
-                                    instanceId,
-                                }
-                            );
-
+                            const instanceId = this.createLandmark(createOptions.landmarkId, createOptions.color, [x, y, z])
                             onCreated && onCreated(instanceId);
                             modified = true;
                         } else {
-                            indices = [i, j, k] ;
+                            indices = [i, j, k];
                         }
                         break;
 

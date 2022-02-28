@@ -7,7 +7,6 @@ import {
 
 import {
     Popover2,
-    Tooltip2,
 } from "@blueprintjs/popover2";
 
 import "./LandMarksList.scss";
@@ -21,6 +20,7 @@ type LandMarksListProps = {
     onMarkMouseEnter?: (markId: string) => (void),
     onMarkMouseLeave?: (markId: string) => (void),
     onSetNextLandmarkId?: (markId: string) => (void),
+    onLandmarkCreate?: (markId: string) => (void),
     onLandmarkRemove?: (markId: string) => (void),
     onLandmarkFocus?: (markId: string) => (void),
 };
@@ -97,6 +97,7 @@ const LandMarksList = (props: LandMarksListProps) => {
                                     <Icon
                                         icon="map-marker"
                                         style={{ marginTop: 3 }} {...(isSet ? { color: lm.color } : {})}
+                                        onDoubleClick={() => props.onLandmarkCreate?.call(null, lm.id)}
                                     />
 
                                     <span

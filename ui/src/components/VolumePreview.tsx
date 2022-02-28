@@ -1553,6 +1553,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
         }
     };
     //---------------------------------------------------------------------
+    const focusOnMark = (landmarkId: string) => {
+        const mark = landmarksManager?.getMarkInstance(landmarkId);
+        if (mark) {
+            setIndexX(mark.indices[0]);
+            setIndexY(mark.indices[1]);
+            setIndexZ(mark.indices[2]);
+            renderAll();
+        }
+    };
 
     const refreshNormPointer = (container: Element, clientX: number, clientY: number) => {
         const rect = container.getBoundingClientRect();
@@ -1992,6 +2001,17 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                     highlighted={highMarks}
                                     marked={new Set(markInstances.keys())}
                                     onSetNextLandmarkId={(landmarkId) => setNextLandmarkId(landmarkId)}
+                                    onLandmarkCreate={(landmarkId) => {
+                                        if (landmarksManager) {
+                                            const landmarkInfo = knownLandMarks.get(landmarkId);
+                                            if (landmarkInfo) {
+                                                const instanceId = landmarksManager.createLandmark(landmarkId, landmarkInfo.color, landmarkInfo.coord);
+                                                setMarkInstances(landmarksManager.getMarkInstances());
+                                                focusOnMark(landmarkId);
+                                            }
+                                        }
+                                    }}
+
                                     onLandmarkRemove={(landmarkId) => {
                                         if (landmarksManager) {
                                             landmarksManager.remove(landmarkId);
@@ -2012,13 +2032,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                     }}
                                     onLandmarkFocus={(landmarkId) => {
                                         if (markInstances.has(landmarkId)) {
-                                            const mark = landmarksManager?.getMarkInstance(landmarkId);
-                                            if (mark) {
-                                                setIndexX(mark.indices[0]);
-                                                setIndexY(mark.indices[1]);
-                                                setIndexZ(mark.indices[2]);
-                                                renderAll();
-                                            }
+                                            focusOnMark(landmarkId);
                                         }
                                     }}
 
