@@ -263,7 +263,8 @@ const SlicesControls = (props: SlicesControlsProps) => {
                     disabled={!volumeLoaded}
                     min={volumeValMin}
                     max={volumeValMax}
-                    stepSize={2}
+                    stepSize={(volumeValMax - volumeValMin) / 255}
+                    labelPrecision={(volumeValMax - volumeValMin) > 100 ? 0 : 2}
                     labelValues={[]}
                     onChange={setVolumeRange}
                     value={volumeRange}

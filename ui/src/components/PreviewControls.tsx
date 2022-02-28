@@ -85,18 +85,18 @@ const PreviewControls = (props: PreviewControlsProps) => {
                                             label="Ray Casting method"
                                             alignIndicator={Alignment.RIGHT}
                                             innerLabel="Maximum Intensity Projection"
-                                            innerLabelChecked="ISO"
+                                            innerLabelChecked="ISO Surface"
                                             onChange={() =>
                                                 setCastIso(!castIso)
                                             }
                                         />
-                                        <span>Render threshold (ISO)</span>
+                                        <span>Render threshold (ISO Surface)</span>
                                         <Slider
                                             min={volumeValMin}
                                             max={volumeValMax}
                                             disabled={!volumeLoaded || !castIso}
-                                            stepSize={(volumeValMax-volumeValMin)/255}
-                                            labelPrecision={(volumeValMax-volumeValMin)>100 ? 0 : 2}
+                                            stepSize={(volumeValMax - volumeValMin) / 255}
+                                            labelPrecision={(volumeValMax - volumeValMin) > 100 ? 0 : 2}
                                             labelValues={[]}
                                             showTrackFill={false}
                                             value={isothreshold}
@@ -107,8 +107,8 @@ const PreviewControls = (props: PreviewControlsProps) => {
                                             min={volumeValMin}
                                             max={volumeValMax}
                                             disabled={!volumeLoaded}
-                                            stepSize={(volumeValMax-volumeValMin)/255}
-                                            labelPrecision={(volumeValMax-volumeValMin)>100 ? 0 : 2}
+                                            stepSize={(volumeValMax - volumeValMin) / 255}
+                                            labelPrecision={(volumeValMax - volumeValMin) > 100 ? 0 : 2}
                                             labelValues={[]}
                                             showTrackFill={false}
                                             value={clims[0]}
@@ -121,8 +121,8 @@ const PreviewControls = (props: PreviewControlsProps) => {
                                             min={volumeValMin}
                                             max={volumeValMax}
                                             disabled={!volumeLoaded}
-                                            stepSize={(volumeValMax-volumeValMin)/255}
-                                            labelPrecision={(volumeValMax-volumeValMin)>100 ? 0 : 2}
+                                            stepSize={(volumeValMax - volumeValMin) / 255}
+                                            labelPrecision={(volumeValMax - volumeValMin) > 100 ? 0 : 2}
                                             labelValues={[]}
                                             showTrackFill={false}
                                             value={clims[1]}
@@ -162,7 +162,7 @@ const PreviewControls = (props: PreviewControlsProps) => {
                 </div>
             </div>
 
-            <ActionControls volumeFile={props.volumeFile}/>
+            <ActionControls volumeFile={props.volumeFile} />
 
         </div>
     );
