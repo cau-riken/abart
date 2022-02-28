@@ -41,6 +41,7 @@ import { VolumeSlice } from "../misc/VolumeSlice";
 import LandmarksManager, { CreateLandMarkOptions } from "./LandmarksManager";
 import PreviewControls from "./PreviewControls";
 import { EventDispatcher } from "three";
+import HelpNavigation from "./HelpNavigation";
 
 
 type ListenerInfo = {
@@ -1885,7 +1886,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     margin: 2,
                     width: 'calc(100% - 4px)', height: 'calc(100% - 4px)',
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 8fr) minmax(190px, 2fr)',
+                    gridTemplateColumns: 'minmax(0,80%) minmax(190px, 20%)',
+                    gridTemplateRows: '100%',
                     gap: '1px 3px',
                     overflow: 'hidden',
                 }}
@@ -1895,7 +1897,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 >
                     <div
                         style={{
-                            width: '100%', height: '100%', position: 'relative',
+                            maxWidth: '100%', maxHeight: '100%', position: 'relative',
                         }}
                     >
                         {isLoading
@@ -2021,6 +2023,25 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                     }}
 
                                 />
+                            </div>
+                            :
+                            null
+                        }
+
+                        {obj3d.current.volume
+                            ?
+                            <div
+                                style={{
+                                    border: 'none',
+                                    margin: 'auto',
+                                    padding: 0,
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 200,
+                                    right: 100,
+                                }}
+                            >
+                                <HelpNavigation />
                             </div>
                             :
                             null
