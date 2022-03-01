@@ -331,10 +331,11 @@ class LandmarksManager {
             const [i, j, k, x, y, z] = this.pointToSliceIndexes(targetPos.toArray());
 
             mark.position.set(x, y, z);
-            //reset mark instance's slice indices
+            //reset mark instance's coordinates & slice indices
             const markInstance = this.getMarkInstanceById(mark.userData.instanceId);
             if (markInstance) {
                 markInstance.indices = [i, j, k];
+                markInstance.coord = [x, y, z];
             }
         }
     }
