@@ -97,7 +97,7 @@ const LandMarksList = (props: LandMarksListProps) => {
                                     <Icon
                                         icon="map-marker"
                                         style={{ marginTop: 3 }} {...(isSet ? { color: lm.color } : {})}
-                                        onDoubleClick={() => props.onLandmarkCreate?.call(null, lm.id)}
+                                        onDoubleClick={() => !isSet ? props.onLandmarkCreate?.call(null, lm.id) : null }
                                     />
 
                                     <span

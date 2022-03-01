@@ -217,21 +217,24 @@ class LandmarksManager {
     };
 
     createLandmark(landmarkId: string, color: string, coord: number[]) {
-        const [i, j, k, x, y, z] = this.pointToSliceIndexes(coord);
-        const indices = [i, j, k]
-        const mark = LandmarksManager.createLandmarkObj(coord, color);
-        const instanceId = mark.uuid;
-        this.marksGroup.add(mark);
+        let instanceId: string | undefined;
+        if (!this.getMarkInstance(landmarkId)) {
+            const [i, j, k, x, y, z] = this.pointToSliceIndexes(coord);
+            const indices = [i, j, k]
+            const mark = LandmarksManager.createLandmarkObj(coord, color);
+            instanceId = mark.uuid;
+            this.marksGroup.add(mark);
 
-        //record newly created mark instance
-        this.markInstances.set(landmarkId,
-            {
-                landmarkId: landmarkId,
-                coord: [x, y, z],
-                indices: indices,
-                instanceId,
-            }
-        );
+            //record newly created mark instance
+            this.markInstances.set(landmarkId,
+                {
+                    landmarkId: landmarkId,
+                    coord: [x, y, z],
+                    indices: indices,
+                    instanceId,
+                }
+            );
+        }
         return instanceId;
     }
 
@@ -409,8 +412,10 @@ class LandmarksManager {
                         const [i, j, k, x, y, z] = this.pointToSliceIndexes(ntrsect.point.toArray());
                         if (createOptions) {
                             const instanceId = this.createLandmark(createOptions.landmarkId, createOptions.color, [x, y, z])
-                            onCreated && onCreated(instanceId);
-                            modified = true;
+                            if (instanceId) {
+                                onCreated && onCreated(instanceId);
+                                modified = true;
+                            }
                         } else {
                             indices = [i, j, k];
                         }
