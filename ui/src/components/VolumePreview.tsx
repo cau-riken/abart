@@ -158,7 +158,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const [isLoading, setIsLoading] = useAtom(StAtm.isLoading);
     const [volumeLoaded, setVolumeLoaded] = useAtom(StAtm.volumeLoaded);
-    const [volumeFile, ] = useAtom(StAtm.volumeFile);
+    const [volumeFile,] = useAtom(StAtm.volumeFile);
 
     const [alertMessage, setAlertMessage] = useAtom(StAtm.alertMessage);
 
@@ -171,6 +171,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [clipBrainModel, setBrainModel] = useAtom(StAtm.clipBrainModel);
     const [brainModelInitRotation, setBrainModelInitRotation] = useAtom(StAtm.brainModelInitRotation);
     const [fixedBrainModel, setFixedBrainModel] = useAtom(StAtm.fixedBrainModel);
+    const [brainModelRelativeRot,] = useAtom(StAtm.brainModelRelativeRotation);
 
     const [isothreshold, setIsothreshold] = useAtom(StAtm.isothreshold);
     const [clims, setClims] = useAtom(StAtm.clims);
@@ -366,6 +367,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.camera?.lookAt(0, 0, 0);
 
                 updateBrainModelRotation();
+                setCameraPOV(StAtm.CameraPOV.Free);
+
                 renderAll();
             }
         }
@@ -579,12 +582,20 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 //from now on brainModel will look like it's fixed in its current pos
                 //(but it is actually being rotated)
 
-                setBrainModelInitRotation(getRotationOffset());
+                //offset with last updated brainModel rotation 
+                setBrainModelInitRotation(getRotationOffset(rtState.current.brainModelInitRotation));
             }
             renderAll();
         }
     }, [fixedBrainModel]);
 
+    React.useEffect(() => {
+
+        const updatedQ = getRotationOffset(brainModelRelativeRot);
+        setBrainModelInitRotation(updatedQ);
+        updateBrainModelRotation(true);
+
+    }, [brainModelRelativeRot]);
 
     React.useEffect(() => {
         updateBrainModelRotation(true);
@@ -606,7 +617,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         setVolumeLoaded(false);
         setViewMode(StAtm.ViewMode.None);
-
+        setCameraPOV(StAtm.CameraPOV.Free);
 
         setDeltaRotation([0, 0, 0]);
         rtState.current.stopQ = new THREE.Quaternion();
@@ -975,10 +986,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const onCameraChanged = () => {
 
-        if (cameraPOV != StAtm.CameraPOV.Free) {
-            setCameraPOV(StAtm.CameraPOV.Free);
-        }
-
         //keep the brainModel in sync with camera rotation to make it look like it's static
         updateBrainModelRotation();
 
@@ -1316,15 +1323,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
     //-------------------------------------------------------------------------
 
 
-    const getRotationOffset = () => {
+    const getRotationOffset = (withQ: THREE.Quaternion | undefined) => {
         //current camera rotation
         const camQ = new THREE.Quaternion();
-        if (obj3d.current.camera && rtState.current.brainModelInitRotation && rtState.current.stopQ) {
+        if (obj3d.current.camera && withQ && rtState.current.stopQ) {
             obj3d.current.camera.getWorldQuaternion(camQ);
-
-            //last updated brainModel rotation 
-            const initQ = new THREE.Quaternion().copy(rtState.current.brainModelInitRotation)
-
+            const initQ = new THREE.Quaternion().copy(withQ)
             const updatedQ = camQ.invert().multiply(rtState.current.stopQ).multiply(initQ);
             return updatedQ;
         } else {
@@ -1539,6 +1543,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 controls.minDistance = 50;
                 controls.maxDistance = 500;
                 controls.enablePan = false;
+
+                setCameraPOV(StAtm.CameraPOV.Superior);
             }
 
         }
