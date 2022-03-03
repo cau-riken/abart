@@ -36,7 +36,7 @@ export enum ViewMode {
 }
 
 export enum BrainModelMode {
-    Wire,
+    XRay,
     Clipped,
 }
 
@@ -74,7 +74,7 @@ export const cameraPOV = atom(CameraPOV.Free);
 
 
 export const showBrainModel = atom(false);
-export const brainModelMode = atom(BrainModelMode.Wire);
+export const brainModelMode = atom(BrainModelMode.XRay);
 
 export const clipBrainModel = atom(ClipBrainModelMode.None);
 export const brainModelInitRotation = atom(new THREE.Quaternion());

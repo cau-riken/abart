@@ -8,7 +8,7 @@ import Stats from 'three/examples/jsm/libs/stats.module.js';
 
 import { VolumeRenderShader1 } from 'three/examples/jsm/shaders/VolumeShader.js';
 import { ArcballControls } from 'three/examples/jsm/controls/ArcballControls.js';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader';
 import { DragControls } from 'three/examples/jsm/controls/DragControls';
 
 import { NIfTILoader } from '../loaders/NIfTILoader';
@@ -34,8 +34,7 @@ import { PickingMode } from "./LandmarksManager";
 
 import "./VolumePreview.scss";
 
-import { setupAxesHelper } from './Utils';
-
+import { newXRayGlowingMaterial, setupAxesHelper } from './Utils';
 import { Volume } from "../misc/Volume";
 import { VolumeSlice } from "../misc/VolumeSlice";
 import LandmarksManager, { CreateLandMarkOptions } from "./LandmarksManager";
@@ -97,6 +96,9 @@ export type Obj3dRefs = {
 
     //brain model
     brainModel?: THREE.Group | undefined,
+    //materials for brain model
+    brModelPlainMat?: THREE.Material | undefined,
+    brModelXRayMat?: THREE.ShaderMaterial | undefined,
 
     //groups for user created landmarks
     marksGroup?: THREE.Group | undefined,
@@ -318,11 +320,18 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     React.useEffect(() => {
 
-        const wireframe = brainModelMode === StAtm.BrainModelMode.Wire;
-        if (obj3d.current.brainModel) {
+        const isXRay = brainModelMode === StAtm.BrainModelMode.XRay;
+        const material = isXRay
+            ?
+            obj3d.current.brModelXRayMat
+            :
+            obj3d.current.brModelPlainMat
+            ;
+
+        if (obj3d.current.brainModel && material) {
             obj3d.current.brainModel.traverse(function (child) {
                 if (child.type == 'Mesh' && !Array.isArray((child as THREE.Mesh).material)) {
-                    ((child as THREE.Mesh).material as THREE.Material).wireframe = wireframe;
+                    (child as THREE.Mesh).material = material;
                 }
             });
         }
@@ -444,7 +453,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             } else {
                 //brainModel clipping disabled
 
-                setBrainModelMode(StAtm.BrainModelMode.Wire);
+                setBrainModelMode(StAtm.BrainModelMode.XRay);
                 obj3d.current.renderer.localClippingEnabled = false;
             }
             renderAll();
@@ -593,7 +602,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         const updatedQ = getRotationOffset(brainModelRelativeRot);
         setBrainModelInitRotation(updatedQ);
-        updateBrainModelRotation(true);
 
     }, [brainModelRelativeRot]);
 
@@ -1193,81 +1201,81 @@ const VolumePreview = (props: VolumePreviewProps) => {
         return landmarkGroup;
     }
 
-    const initBrainModel = (scene: THREE.Scene, bboxMax: number[], initVisibility: boolean) => {
+    const initBrainModel = (scene: THREE.Scene, cameraPos: THREE.Vector3, bboxMax: number[], initVisibility: boolean) => {
 
         const [mboxXLen, mboxYLen, mboxZLen] = bboxMax;
 
-        const objloader = new OBJLoader();
-        const brainModelColor = new THREE.Color(0xFF88FF)
-        //objloader.setMaterials(objmaterial);
+        const plyloader = new PLYLoader()
+        const brainModelClippedColor = new THREE.Color(0xFF00FF);
+        const brainModelXRayColor = new THREE.Color(0x0087ff);
 
         const clipPlanes: THREE.Plane[] = [];
-        const material = new THREE.MeshLambertMaterial({
-            color: brainModelColor,
+        const plainMat = new THREE.MeshLambertMaterial({
+            color: brainModelClippedColor,
             side: THREE.DoubleSide,
             clippingPlanes: clipPlanes,
             clipIntersection: false,
         });
+        obj3d.current.disposable.push(plainMat);
+        obj3d.current.brModelPlainMat = plainMat;
 
-        objloader.load("models/bma_sp2-lh.surf-simpld.obj", function (leftHemisphere) {
+        const xrayMat = newXRayGlowingMaterial(brainModelXRayColor, cameraPos);
+        obj3d.current.disposable.push(xrayMat);
+        obj3d.current.brModelXRayMat = xrayMat;
 
-            //update left-hemisphere to display as wireframe
-            leftHemisphere.traverse(function (child) {
-                if (child.type == 'Mesh' && !Array.isArray((child as THREE.Mesh).material)) {
-                    const material = (child as THREE.Mesh).material as THREE.Material;
-                    material.wireframe = true;
-                    material.color = brainModelColor;
-                    //material.opacity = 0.9;
-                    //material.transparent = true;
-                    material.side = THREE.DoubleSide;
-                    material.clippingPlanes = clipPlanes;
-                    material.clipIntersection = false;
-                }
-            });
-            //create right-hemisphere by mirroring through sagittal (median) plane
-            const rightHemisphere = leftHemisphere.clone();
+        plyloader.load(
+            'models/bma_sp2.lh.surf_20kf.ply',
+            (lhGeom) => plyloader.load(
+                'models/bma_sp2.rh.surf_20kf.ply',
+                (rhGeom) => {
 
-            const mirrorMatrix = new THREE.Matrix4().set(
-                -1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1
-            );
-            rightHemisphere.applyMatrix4(mirrorMatrix);
+                    lhGeom.computeVertexNormals()
+                    const lhMesh = new THREE.Mesh(lhGeom, xrayMat)
+                    const leftHemisphere = new THREE.Group();
+                    leftHemisphere.add(lhMesh)
 
-            //group both hemisphere
-            const brainModel = new THREE.Group();
-            brainModel.name = 'brainModel-group';
+                    rhGeom.computeVertexNormals()
+                    const rhMesh = new THREE.Mesh(rhGeom, xrayMat)
+                    const rightHemisphere = new THREE.Group();
+                    rightHemisphere.add(rhMesh)
 
-            brainModel.add(leftHemisphere);
-            brainModel.add(rightHemisphere);
+                    //group both hemisphere
+                    const brainModel = new THREE.Group();
+                    brainModel.name = 'brainModel-group';
 
-            //scale brainModel to roughly fit image dimension 
-            const sf = 0.8;
-            var templBbox = new THREE.Box3().setFromObject(brainModel);
+                    brainModel.add(leftHemisphere);
+                    brainModel.add(rightHemisphere);
 
-            const [brainboxXLen, brainboxYLen, brainboxZLen] = templBbox.max.toArray();
-            const scaleTemplMatrix = new THREE.Matrix4().set(
-                sf * mboxXLen / brainboxXLen, 0, 0, 0,
-                0, sf * mboxYLen / brainboxYLen, 0, 0,
-                0, 0, sf * mboxZLen / brainboxZLen, 0,
-                0, 0, 0, 1
-            );
+                    //scale brainModel to roughly fit image dimension 
+                    const sf = 0.8;
+                    var templBbox = new THREE.Box3().setFromObject(brainModel);
 
-            brainModel.applyMatrix4(scaleTemplMatrix);
-            brainModel.visible = initVisibility;
-            scene.add(brainModel);
-            obj3d.current.brainModel = brainModel;
+                    const [brainboxXLen, brainboxYLen, brainboxZLen] = templBbox.max.toArray();
+                    const scaleTemplMatrix = new THREE.Matrix4().set(
+                        sf * mboxXLen / brainboxXLen, 0, 0, 0,
+                        0, sf * mboxYLen / brainboxYLen, 0, 0,
+                        0, 0, sf * mboxZLen / brainboxZLen, 0,
+                        0, 0, 0, 1
+                    );
 
-            const landmarks = createLandMarks();
-            landmarks.applyMatrix4(scaleTemplMatrix.invert());
-            brainModel.add(landmarks);
+                    brainModel.applyMatrix4(scaleTemplMatrix);
 
-            const initialQ = new THREE.Quaternion();
-            brainModel.getWorldQuaternion(initialQ);
-            setBrainModelInitRotation(initialQ);
+                    brainModel.visible = initVisibility;
 
-        });
+                    scene.add(brainModel);
+                    obj3d.current.brainModel = brainModel;
+
+                    const landmarks = createLandMarks();
+                    landmarks.applyMatrix4(scaleTemplMatrix.invert());
+                    brainModel.add(landmarks);
+
+                    const initialQ = new THREE.Quaternion();
+                    brainModel.getWorldQuaternion(initialQ);
+                    setBrainModelInitRotation(initialQ);
+
+
+                })
+        );
     };
 
     const refreshClippingPlanes = (clipBrainModel: StAtm.ClipBrainModelMode) => {
@@ -1310,12 +1318,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     new THREE.Plane(planeNorms[1], -pos + thickness)
                 );
 
-
-                obj3d.current.brainModel?.traverse(function (child) {
-                    if (child.type == 'Mesh' && !Array.isArray((child as THREE.Mesh).material)) {
-                        ((child as THREE.Mesh).material as THREE.Material).clippingPlanes = clipPlanes;
-                    }
-                });
+                if (obj3d.current.brModelPlainMat) {
+                    obj3d.current.brModelPlainMat.clippingPlanes = clipPlanes;
+                }
             }
         }
     };
@@ -1358,6 +1363,13 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     obj3d.current.brainModel.rotation.toArray() as [number, number, number]
                 );
             }
+
+            //update view vector for brain model's XRay material
+            if (obj3d.current.brModelXRayMat && obj3d.current.camera && obj3d.current.brainModel) {
+                const subV = new THREE.Vector3().subVectors(obj3d.current.camera?.position, obj3d.current.brainModel?.position)
+                obj3d.current.brModelXRayMat.uniforms.viewVector.value = subV;
+            }
+
         }
 
     };
@@ -1529,8 +1541,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.sliceZCtrl && attachDragListeners(obj3d.current.dragCtrlZ, obj3d.current.sliceZCtrl);
                 //-----------------------------------------------------------------
 
-                initBrainModel(obj3d.current.scene, mriBbox.max.toArray(), false);
-                setBrainModelMode(clipBrainModel === StAtm.ClipBrainModelMode.None ? StAtm.BrainModelMode.Wire : StAtm.BrainModelMode.Clipped);
+                initBrainModel(obj3d.current.scene, obj3d.current.camera.position, mriBbox.max.toArray(), false);
+                setBrainModelMode(clipBrainModel === StAtm.ClipBrainModelMode.None ? StAtm.BrainModelMode.XRay : StAtm.BrainModelMode.Clipped);
 
                 //-- controls for main view (no gizmos)
                 const controls = new ArcballControls(obj3d.current.camera, obj3d.current.renderer.domElement);
