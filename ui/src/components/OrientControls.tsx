@@ -24,6 +24,7 @@ const OrientControls = () => {
     const [, setCameraPOV] = useAtom(StAtm.cameraPOV);
 
     const [showBrainModel, setShowBrainModel] = useAtom(StAtm.showBrainModel);
+    const [brainModelMode, setBrainModelMode] = useAtom(StAtm.brainModelMode);
 
     const [, setBrainModelInitRotation] = useAtom(StAtm.brainModelInitRotation);
     const [fixedBrainModel, setFixedBrainModel] = useAtom(StAtm.fixedBrainModel);
@@ -48,6 +49,21 @@ const OrientControls = () => {
                         setShowBrainModel(!showBrainModel)}
                 />
                 <span></span>
+                <Switch
+                    checked={brainModelMode === StAtm.BrainModelMode.Volume}
+                    disabled={!volumeLoaded || !showBrainModel}
+                    innerLabel="clipped"
+                    innerLabelChecked="volume"
+                    onChange={() =>
+                        setBrainModelMode(
+                            brainModelMode === StAtm.BrainModelMode.Volume
+                                ?
+                                StAtm.BrainModelMode.Clipped
+                                :
+                                StAtm.BrainModelMode.Volume
+                        )
+                    }
+                />
             </div>
 
             <div

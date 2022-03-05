@@ -97,7 +97,7 @@ export type Obj3dRefs = {
     //brain model
     brainModel?: THREE.Group | undefined,
     //materials for brain model
-    brModelPlainMat?: THREE.Material | undefined,
+    brModelPlainMats?: THREE.Material[] | undefined,
     brModelXRayMat?: THREE.ShaderMaterial | undefined,
 
     //groups for user created landmarks
@@ -170,7 +170,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [showBrainModel, setShowBrainModel] = useAtom(StAtm.showBrainModel);
     const [brainModelMode, setBrainModelMode] = useAtom(StAtm.brainModelMode);
 
-    const [clipBrainModel, setBrainModel] = useAtom(StAtm.clipBrainModel);
+    const [clipXBrainModel, setClipXBrainModel] = useAtom(StAtm.clipXBrainModel);
+    const [clipYBrainModel, setClipYBrainModel] = useAtom(StAtm.clipYBrainModel);
+    const [clipZBrainModel, setClipZBrainModel] = useAtom(StAtm.clipZBrainModel);
     const [brainModelInitRotation, setBrainModelInitRotation] = useAtom(StAtm.brainModelInitRotation);
     const [fixedBrainModel, setFixedBrainModel] = useAtom(StAtm.fixedBrainModel);
     const [brainModelRelativeRot,] = useAtom(StAtm.brainModelRelativeRotation);
@@ -289,6 +291,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
             landmarksManager?.showAllMarkBullets();
 
         } else {
+            //show at least one slice
+            if (!showXSlice && !showYSlice && !showZSlice) {
+                setShowXSlice(true);
+            }
 
             const sliceXRendCont = sliceXRendererContainer.current;
             if (sliceXRendCont && obj3d.current.rendX) {
@@ -318,25 +324,22 @@ const VolumePreview = (props: VolumePreviewProps) => {
     }, [deltaRotation]);
 
 
-    React.useEffect(() => {
-
-        const isXRay = brainModelMode === StAtm.BrainModelMode.XRay;
-        const material = isXRay
-            ?
-            obj3d.current.brModelXRayMat
-            :
-            obj3d.current.brModelPlainMat
-            ;
-
-        if (obj3d.current.brainModel && material) {
-            obj3d.current.brainModel.traverse(function (child) {
-                if (child.type == 'Mesh' && !Array.isArray((child as THREE.Mesh).material)) {
-                    (child as THREE.Mesh).material = material;
-                }
-            });
+    const refreshBrainModelVisibility = () => {
+        if (obj3d.current.brainModel?.children) {
+            const isVolume = brainModelMode === StAtm.BrainModelMode.Volume;
+            [
+                !isVolume && clipXBrainModel,
+                !isVolume && clipYBrainModel,
+                !isVolume && clipZBrainModel,
+                isVolume,
+            ].forEach((visible, index) =>
+                obj3d.current.brainModel.children[index].visible = visible);
         }
-        renderAll();
+    };
 
+    React.useEffect(() => {
+        refreshBrainModelVisibility();
+        renderAll();
     }, [brainModelMode]);
 
 
@@ -389,13 +392,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         if (obj3d.current.sliceX) {
             obj3d.current.sliceX.mesh.material.visible = showXSlice;
-            if (!showXSlice && clipBrainModel === StAtm.ClipBrainModelMode.ClipX) {
-                setBrainModel(StAtm.ClipBrainModelMode.None);
-            }
-            if (!showXSlice && !showYSlice && !showZSlice) {
-                setShowYSlice(true);
-            }
             if (viewMode === StAtm.ViewMode.Slice2D) {
+                if (!showXSlice && !showYSlice && !showZSlice) {
+                    setShowYSlice(true);
+                }
                 handleResize();
             }
             renderAll();
@@ -407,13 +407,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         if (obj3d.current.sliceY) {
             obj3d.current.sliceY.mesh.material.visible = showYSlice;
-            if (!showYSlice && clipBrainModel == StAtm.ClipBrainModelMode.ClipY) {
-                setBrainModel(StAtm.ClipBrainModelMode.None);
-            }
-            if (!showXSlice && !showYSlice && !showZSlice) {
-                setShowZSlice(true);
-            }
             if (viewMode === StAtm.ViewMode.Slice2D) {
+                if (!showXSlice && !showYSlice && !showZSlice) {
+                    setShowZSlice(true);
+                }
                 handleResize();
             }
             renderAll();
@@ -425,13 +422,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         if (obj3d.current.sliceZ) {
             obj3d.current.sliceZ.mesh.material.visible = showZSlice;
-            if (!showZSlice && clipBrainModel === StAtm.ClipBrainModelMode.ClipZ) {
-                setBrainModel(StAtm.ClipBrainModelMode.None);
-            }
-            if (!showXSlice && !showYSlice && !showZSlice) {
-                setShowXSlice(true);
-            }
             if (viewMode === StAtm.ViewMode.Slice2D) {
+                if (!showXSlice && !showYSlice && !showZSlice) {
+                    setShowXSlice(true);
+                }
                 handleResize();
             }
             renderAll();
@@ -443,32 +437,46 @@ const VolumePreview = (props: VolumePreviewProps) => {
     React.useEffect(() => {
 
         if (obj3d.current.renderer) {
-            if (clipBrainModel != StAtm.ClipBrainModelMode.None) {
-                //brainModel clipping enabled
-
-                setBrainModelMode(StAtm.BrainModelMode.Clipped);
-                refreshClippingPlanes(clipBrainModel);
-                obj3d.current.renderer.localClippingEnabled = true;
-
-            } else {
-                //brainModel clipping disabled
-
-                setBrainModelMode(StAtm.BrainModelMode.XRay);
-                obj3d.current.renderer.localClippingEnabled = false;
+            if (clipXBrainModel) {
+                refreshClippingPlanes(StAtm.PlaneIndex.X);
             }
+            refreshBrainModelVisibility();
             renderAll();
         }
 
-    }, [clipBrainModel]);
+    }, [clipXBrainModel]);
 
+    React.useEffect(() => {
+
+        if (obj3d.current.renderer) {
+            if (clipYBrainModel) {
+                refreshClippingPlanes(StAtm.PlaneIndex.Y);
+            }
+            refreshBrainModelVisibility();
+            renderAll();
+        }
+
+    }, [clipYBrainModel]);
+
+    React.useEffect(() => {
+
+        if (obj3d.current.renderer) {
+            if (clipZBrainModel) {
+                refreshClippingPlanes(StAtm.PlaneIndex.Z);
+            }
+            refreshBrainModelVisibility();
+            renderAll();
+        }
+
+    }, [clipZBrainModel]);
 
     React.useEffect(() => {
 
         if (volumeLoaded && obj3d.current.sliceX) {
             obj3d.current.sliceX.index = indexX;
             obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
-            if (clipBrainModel === StAtm.ClipBrainModelMode.ClipX) {
-                refreshClippingPlanes(clipBrainModel);
+            if (brainModelMode === StAtm.BrainModelMode.Clipped) {
+                refreshClippingPlanes(StAtm.PlaneIndex.X);
             }
 
             landmarksManager?.showMarkBulletsBySlices([0], [indexX, indexY, indexZ])
@@ -484,8 +492,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (volumeLoaded && obj3d.current.sliceY) {
             obj3d.current.sliceY.index = indexY;
             obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
-            if (clipBrainModel === StAtm.ClipBrainModelMode.ClipY) {
-                refreshClippingPlanes(clipBrainModel);
+            if (brainModelMode === StAtm.BrainModelMode.Clipped) {
+                refreshClippingPlanes(StAtm.PlaneIndex.Y);
             }
 
             landmarksManager?.showMarkBulletsBySlices([1], [indexX, indexY, indexZ])
@@ -501,8 +509,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (volumeLoaded && obj3d.current.sliceZ) {
             obj3d.current.sliceZ.index = indexZ;
             obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
-            if (clipBrainModel === StAtm.ClipBrainModelMode.ClipZ) {
-                refreshClippingPlanes(clipBrainModel);
+            if (brainModelMode === StAtm.BrainModelMode.Clipped) {
+                refreshClippingPlanes(StAtm.PlaneIndex.Z);
             }
 
             landmarksManager?.showMarkBulletsBySlices([2], [indexX, indexY, indexZ])
@@ -631,7 +639,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
         rtState.current.stopQ = new THREE.Quaternion();
 
         setShowBrainModel(false);
-        setBrainModel(StAtm.ClipBrainModelMode.None);
+        setBrainModelMode(StAtm.BrainModelMode.Volume);
+        setClipXBrainModel(false);
+        setClipYBrainModel(false);
+        setClipZBrainModel(false);
+
         setBrainModelInitRotation(new THREE.Quaternion());
         setFixedBrainModel(false);
 
@@ -834,7 +846,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             renderer.setPixelRatio(window.devicePixelRatio);
             volRendCont.appendChild(renderer.domElement);
 
-            renderer.localClippingEnabled = (clipBrainModel != StAtm.ClipBrainModelMode.None);
+            renderer.localClippingEnabled = true;
             obj3d.current.renderer = renderer;
 
             /*
@@ -1206,18 +1218,27 @@ const VolumePreview = (props: VolumePreviewProps) => {
         const [mboxXLen, mboxYLen, mboxZLen] = bboxMax;
 
         const plyloader = new PLYLoader()
-        const brainModelClippedColor = new THREE.Color(0xFF00FF);
+        const brainModelClippedColors = [
+            new THREE.Color(0xFF0000),
+            new THREE.Color(0x00FF00),
+            new THREE.Color(0x0000FF),
+        ];
         const brainModelXRayColor = new THREE.Color(0x0087ff);
 
         const clipPlanes: THREE.Plane[] = [];
-        const plainMat = new THREE.MeshLambertMaterial({
-            color: brainModelClippedColor,
-            side: THREE.DoubleSide,
-            clippingPlanes: clipPlanes,
-            clipIntersection: false,
+
+        const clippedMats: THREE.Material[] = [];
+        [0, 1, 2].forEach(planeIndex => {
+            const plainMat = new THREE.MeshLambertMaterial({
+                color: brainModelClippedColors[planeIndex],
+                side: THREE.DoubleSide,
+                clippingPlanes: clipPlanes,
+                clipIntersection: false,
+            });
+            clippedMats.push(plainMat);
+            obj3d.current.disposable.push(plainMat);
         });
-        obj3d.current.disposable.push(plainMat);
-        obj3d.current.brModelPlainMat = plainMat;
+        obj3d.current.brModelPlainMats = clippedMats;
 
         const xrayMat = newXRayGlowingMaterial(brainModelXRayColor, cameraPos);
         obj3d.current.disposable.push(xrayMat);
@@ -1229,22 +1250,33 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 'models/bma_sp2.rh.surf_20kf.ply',
                 (rhGeom) => {
 
-                    lhGeom.computeVertexNormals()
-                    const lhMesh = new THREE.Mesh(lhGeom, xrayMat)
-                    const leftHemisphere = new THREE.Group();
-                    leftHemisphere.add(lhMesh)
+                    const createBrainModelMesh = (material: THREE.Material) => {
+                        const brainModel = new THREE.Group();
+                        lhGeom.computeVertexNormals()
+                        const lhMesh = new THREE.Mesh(lhGeom, material)
 
-                    rhGeom.computeVertexNormals()
-                    const rhMesh = new THREE.Mesh(rhGeom, xrayMat)
-                    const rightHemisphere = new THREE.Group();
-                    rightHemisphere.add(rhMesh)
+                        rhGeom.computeVertexNormals()
+                        const rhMesh = new THREE.Mesh(rhGeom, material)
 
-                    //group both hemisphere
+                        //group both hemisphere
+                        brainModel.add(lhMesh);
+                        brainModel.add(rhMesh);
+                        return brainModel;
+                    };
+
                     const brainModel = new THREE.Group();
                     brainModel.name = 'brainModel-group';
 
-                    brainModel.add(leftHemisphere);
-                    brainModel.add(rightHemisphere);
+
+                    [0, 1, 2].forEach(planeIndex => {
+                        const clipXShell = createBrainModelMesh(clippedMats[planeIndex]);
+                        clipXShell.visible = false;
+                        brainModel.add(clipXShell);
+                    });
+
+                    const brainShell = createBrainModelMesh(xrayMat);
+                    brainModel.add(brainShell);
+
 
                     //scale brainModel to roughly fit image dimension 
                     const sf = 0.8;
@@ -1278,50 +1310,53 @@ const VolumePreview = (props: VolumePreviewProps) => {
         );
     };
 
-    const refreshClippingPlanes = (clipBrainModel: StAtm.ClipBrainModelMode) => {
+    const getClippingPlanes = (planeIndex: StAtm.PlaneIndex, pos: number) => {
+        const planeNorms: THREE.Vector3[] = [];
+        switch (planeIndex) {
+            case StAtm.PlaneIndex.X:
+                planeNorms.push(new THREE.Vector3(-1, 0, 0));
+                planeNorms.push(new THREE.Vector3(1, 0, 0));
+                break;
+            case StAtm.PlaneIndex.Y:
+                planeNorms.push(new THREE.Vector3(0, -1, 0));
+                planeNorms.push(new THREE.Vector3(0, 1, 0));
+                break;
+            case StAtm.PlaneIndex.Z:
+                planeNorms.push(new THREE.Vector3(0, 0, -1));
+                planeNorms.push(new THREE.Vector3(0, 0, 1));
+                break;
+        }
+        const clipPlanes: THREE.Plane[] = [];
+        if (!isNaN(pos)) {
+            const thickness = 1.5;
 
-        if (clipBrainModel) {
-            const planeNorms: THREE.Vector3[] = [];
-            let slice: VolumeSlice;
-            let pos: number = NaN;
+            clipPlanes.push(
+                new THREE.Plane(planeNorms[0], pos + thickness)
+            );
+            clipPlanes.push(
+                new THREE.Plane(planeNorms[1], -pos + thickness)
+            );
 
-            switch (clipBrainModel) {
-                case StAtm.ClipBrainModelMode.ClipX:
-                    planeNorms.push(new THREE.Vector3(-1, 0, 0));
-                    planeNorms.push(new THREE.Vector3(1, 0, 0));
-                    slice = obj3d.current.sliceX;
-                    pos = slice.mesh.matrix.elements[12];
-                    break;
-                case StAtm.ClipBrainModelMode.ClipY:
-                    planeNorms.push(new THREE.Vector3(0, -1, 0));
-                    planeNorms.push(new THREE.Vector3(0, 1, 0));
-                    slice = obj3d.current.sliceY;
-                    pos = slice.mesh.matrix.elements[13];
-                    break;
-                case StAtm.ClipBrainModelMode.ClipZ:
-                    planeNorms.push(new THREE.Vector3(0, 0, -1));
-                    planeNorms.push(new THREE.Vector3(0, 0, 1));
-                    slice = obj3d.current.sliceZ;
-                    pos = slice.mesh.matrix.elements[14];
-                    break;
+        }
+        return clipPlanes;
+    };
 
+    const refreshClippingPlanes = (planeIndex?: StAtm.PlaneIndex) => {
+        if (obj3d.current.brModelPlainMats) {
+
+            if (typeof planeIndex === 'undefined' || planeIndex === StAtm.PlaneIndex.X) {
+                obj3d.current.brModelPlainMats[0].clippingPlanes =
+                    getClippingPlanes(StAtm.PlaneIndex.X, obj3d.current.sliceX.mesh.matrix.elements[12]);
             }
-            if (!isNaN(pos)) {
-
-                const thickness = 1.5;
-                const clipPlanes: THREE.Plane[] = [];
-
-                clipPlanes.push(
-                    new THREE.Plane(planeNorms[0], pos + thickness)
-                );
-                clipPlanes.push(
-                    new THREE.Plane(planeNorms[1], -pos + thickness)
-                );
-
-                if (obj3d.current.brModelPlainMat) {
-                    obj3d.current.brModelPlainMat.clippingPlanes = clipPlanes;
-                }
+            if (typeof planeIndex === 'undefined' || planeIndex === StAtm.PlaneIndex.Y) {
+                obj3d.current.brModelPlainMats[1].clippingPlanes =
+                    getClippingPlanes(StAtm.PlaneIndex.Y, obj3d.current.sliceY.mesh.matrix.elements[13]);
             }
+            if (typeof planeIndex === 'undefined' || planeIndex === StAtm.PlaneIndex.Z) {
+                obj3d.current.brModelPlainMats[2].clippingPlanes =
+                    getClippingPlanes(StAtm.PlaneIndex.Z, obj3d.current.sliceZ.mesh.matrix.elements[14]);
+            }
+            
         }
     };
 
@@ -1542,7 +1577,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 //-----------------------------------------------------------------
 
                 initBrainModel(obj3d.current.scene, obj3d.current.camera.position, mriBbox.max.toArray(), false);
-                setBrainModelMode(clipBrainModel === StAtm.ClipBrainModelMode.None ? StAtm.BrainModelMode.XRay : StAtm.BrainModelMode.Clipped);
+                setBrainModelMode(StAtm.BrainModelMode.Volume);
 
                 //-- controls for main view (no gizmos)
                 const controls = new ArcballControls(obj3d.current.camera, obj3d.current.renderer.domElement);
@@ -1557,6 +1592,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 controls.enablePan = false;
 
                 setCameraPOV(StAtm.CameraPOV.Superior);
+                refreshClippingPlanes();
             }
 
         }

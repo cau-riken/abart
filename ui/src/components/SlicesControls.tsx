@@ -25,7 +25,9 @@ const SlicesControls = (props: SlicesControlsProps) => {
 
     const setCameraPOV = useSetAtom(StAtm.cameraPOV);
 
-    const [clipWire, setClipWire] = useAtom(StAtm.clipBrainModel);
+    const [clipXBrainModel, setClipXBrainModel] = useAtom(StAtm.clipXBrainModel);
+    const [clipYBrainModel, setClipYBrainModel] = useAtom(StAtm.clipYBrainModel);
+    const [clipZBrainModel, setClipZBrainModel] = useAtom(StAtm.clipZBrainModel);
 
     const [showXSlice, setShowXSlice] = useAtom(StAtm.showXSlice);
     const [showYSlice, setShowYSlice] = useAtom(StAtm.showYSlice);
@@ -66,11 +68,11 @@ const SlicesControls = (props: SlicesControlsProps) => {
                             ?
 
                             <Switch
-                                checked={clipWire === StAtm.ClipBrainModelMode.ClipX}
-                                disabled={maxIndexX <= 0 || !showXSlice}
+                                checked={clipXBrainModel}
+                                disabled={maxIndexX <= 0}
                                 label="clip brainModel"
                                 onChange={() =>
-                                    setClipWire(clipWire === StAtm.ClipBrainModelMode.ClipX ? StAtm.ClipBrainModelMode.None : StAtm.ClipBrainModelMode.ClipX)
+                                    setClipXBrainModel(!clipXBrainModel)
                                 }
                             />
                             :
@@ -82,7 +84,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         className="x-slider"
                         min={0}
                         max={maxIndexX}
-                        disabled={maxIndexX <= 0 || !showXSlice}
+                        disabled={maxIndexX <= 0}
                         labelValues={[]}
                         showTrackFill={false}
                         value={indexX}
@@ -130,11 +132,11 @@ const SlicesControls = (props: SlicesControlsProps) => {
                             ?
 
                             <Switch
-                                checked={clipWire === StAtm.ClipBrainModelMode.ClipY}
-                                disabled={maxIndexY <= 0 || !showYSlice}
+                                checked={clipYBrainModel}
+                                disabled={maxIndexY <= 0}
                                 label="clip brainModel"
                                 onChange={() =>
-                                    setClipWire(clipWire === StAtm.ClipBrainModelMode.ClipY ? StAtm.ClipBrainModelMode.None : StAtm.ClipBrainModelMode.ClipY)
+                                    setClipYBrainModel(!clipYBrainModel)
                                 }
                             />
                             :
@@ -147,7 +149,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         className="y-slider"
                         min={0}
                         max={maxIndexY}
-                        disabled={maxIndexY <= 0 || !showYSlice}
+                        disabled={maxIndexY <= 0}
                         labelValues={[]}
                         showTrackFill={false}
                         value={indexY}
@@ -196,11 +198,11 @@ const SlicesControls = (props: SlicesControlsProps) => {
                             ?
 
                             <Switch
-                                checked={clipWire === StAtm.ClipBrainModelMode.ClipZ}
-                                disabled={maxIndexZ <= 0 || !showZSlice}
+                                checked={clipZBrainModel}
+                                disabled={maxIndexZ <= 0}
                                 label="clip brainModel"
                                 onChange={() =>
-                                    setClipWire(clipWire === StAtm.ClipBrainModelMode.ClipZ ? StAtm.ClipBrainModelMode.None : StAtm.ClipBrainModelMode.ClipZ)
+                                    setClipZBrainModel(!clipZBrainModel)
                                 }
                             />
                             :
@@ -212,7 +214,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         className="z-slider"
                         min={0}
                         max={maxIndexZ}
-                        disabled={maxIndexZ <= 0 || !showZSlice}
+                        disabled={maxIndexZ <= 0}
                         labelValues={[]}
                         showTrackFill={false}
                         value={indexZ}
