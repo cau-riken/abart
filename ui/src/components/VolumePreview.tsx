@@ -718,13 +718,22 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     function onProgress(request: ProgressEvent) {
                         //console.log('onProgress', request)
                     },
-                    function onError(e) {
+                    function onError(e: ErrorEvent) {
                         console.error(e);
                         setAlertMessage(
                             <p>
                                 Couldn't load the selected file.
                                 <br />
-                                Please check it is a valid NIFTi file.
+
+                                {
+                                    e.message
+                                        ?
+                                        <p>Reason:<pre>{e.message}</pre></p>
+                                        :
+                                        <span>"Please check it is a valid NIFTi file."</span>
+                                }
+
+
                             </p>);
                         setIsLoading(false);
                     },

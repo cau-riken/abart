@@ -35,7 +35,7 @@ class NIfTILoader extends Loader {
 
 			try {
 
-				onLoad(scope.parse(data as ArrayBuffer));
+				onLoad(scope.parse(data as ArrayBuffer, onError));
 
 			} catch (e) {
 
@@ -57,7 +57,7 @@ class NIfTILoader extends Loader {
 
 	}
 
-	parse(_data: ArrayBuffer): Volume {
+	parse(_data: ArrayBuffer, onError?: (event: ErrorEvent) => void): Volume {
 
 
 		const getDataType = (dataTypeCode: number) => {
@@ -112,6 +112,19 @@ class NIfTILoader extends Loader {
 			const niftiHeader = Nifti.readHeader(data);
 			//console.log(niftiHeader);
 			console.log(niftiHeader.toFormattedString());
+			if (niftiHeader.sform_code === 0) {
+				const errorInitEvent: ErrorEventInit = {
+					error : new Error('NIFTIParseError'),
+					message : 'S-Form is not defined in the NIFTI header',
+					lineno : 0,
+					colno: 0,
+					filename : ''
+				};
+				
+				onError && onError(new ErrorEvent('NIFTILoadError', errorInitEvent));
+				return;
+			};
+			
 
 			const niftiImage = Nifti.readImage(niftiHeader, data);
 			/*
