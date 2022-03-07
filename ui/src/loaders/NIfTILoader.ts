@@ -4,6 +4,7 @@ import {
 	LoadingManager,
 	Matrix4,
 	Vector4,
+	Quaternion,
 } from 'three';
 
 //import { Volume } from 'three/examples/jsm/misc/Volume.js';
@@ -112,19 +113,65 @@ class NIfTILoader extends Loader {
 			const niftiHeader = Nifti.readHeader(data);
 			//console.log(niftiHeader);
 			console.log(niftiHeader.toFormattedString());
-			if (niftiHeader.sform_code === 0) {
+
+			const qfac = niftiHeader.pixDims[0];
+			let affine: Matrix4;
+			//NIfTI header can specify affine in one of three ways
+			//see https://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1.h
+			if (niftiHeader.qform_code === 0) {
+				console.log('METHOD 1 - "old way"');
 				const errorInitEvent: ErrorEventInit = {
-					error : new Error('NIFTIParseError'),
-					message : 'S-Form is not defined in the NIFTI header',
-					lineno : 0,
+					error: new Error('NIFTIParseError'),
+					message: 'Unable to process this NIfTI file (METHOD 1, qform_code = 0)',
+					lineno: 0,
 					colno: 0,
-					filename : ''
+					filename: ''
 				};
-				
+
 				onError && onError(new ErrorEvent('NIFTILoadError', errorInitEvent));
 				return;
-			};
-			
+
+			} else if (niftiHeader.qform_code > 0) {
+				//the affine natrix is null, should use Q-form instead
+				console.log('METHOD 2 - "normal" case');
+
+				//FIXME not using a-form offsets : qoffset_x, qoffset_y, qoffset_z
+				const [b, c, d] = [niftiHeader.quatern_b, niftiHeader.quatern_c, niftiHeader.quatern_d];
+				const a = Math.sqrt(1.0 - (b * b + c * c + d * d))
+				affine = new Matrix4().makeRotationFromQuaternion(new Quaternion(a, b, c, d));
+
+			} else if (niftiHeader.sform_code > 0) {
+				console.log("METHOD 3");
+
+				//FIXME identity matrix for now
+				affine = new Matrix4();
+				{
+					//apply mirroring if necessary
+					const i = niftiHeader.affine[0][0];
+					const j = niftiHeader.affine[1][1];
+					const k = niftiHeader.affine[2][2];
+
+					affine.set(
+						Math.sign(i), 0, 0, 0,
+						0, Math.sign(j), 0, 0,
+						0, 0, Math.sign(k), 0,
+						0, 0, 0, 1);
+				}
+
+			} else {
+				//should not happen
+				const errorInitEvent: ErrorEventInit = {
+					error: new Error('NIFTIParseError'),
+					message: 'Unable to process this NIfTI file',
+					lineno: 0,
+					colno: 0,
+					filename: ''
+				};
+
+				onError && onError(new ErrorEvent('NIFTILoadError', errorInitEvent));
+				return;
+			}
+
 
 			const niftiImage = Nifti.readImage(niftiHeader, data);
 			/*
@@ -183,23 +230,7 @@ class NIfTILoader extends Loader {
 				volume.spacing = [1, 1, 1];
 
 				// IJK to RAS and invert
-
-				//FIXME identity matrix for now
-				volume.matrix = new Matrix4();
-
-				{
-					//apply mirroring if necessary
-					const i = niftiHeader.affine[0][0];
-					const j = niftiHeader.affine[1][1];
-					const k = niftiHeader.affine[2][2];
-
-					volume.matrix.set(
-						Math.sign(i), 0, 0, 0,
-						0, Math.sign(j), 0, 0,
-						0, 0, Math.sign(k), 0,
-						0, 0, 0, 1);
-
-				}
+				volume.matrix = affine;
 
 				volume.inverseMatrix = volume.matrix.clone().invert();
 
