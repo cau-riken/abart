@@ -91,7 +91,7 @@ export type Obj3dRefs = {
     sliceZ?: VolumeSlice | undefined,
 
     //for volume rendering
-    vol3D?: THREE.Mesh | undefined,
+    vol3D?: THREE.Group | undefined,
     materialVol3D?: THREE.ShaderMaterial | undefined,
 
     //brain model
@@ -1038,7 +1038,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (volume.datatype == Float64Array) {
             data = new Float32Array(volume.data.length);
             (volume.data as Float64Array).forEach((e, i) => data[i] = e / 2);
-        } else if (volume.datatype == Int16Array) {
+        } else if (volume.datatype == Int16Array || volume.datatype == Uint16Array) {
             data = new Float32Array(volume.data.length);
             (volume.data as Float64Array).forEach((e, i) => data[i] = e * 1.0);
         }
@@ -1085,14 +1085,20 @@ const VolumePreview = (props: VolumePreviewProps) => {
         mesh.translateZ(-volume.zLength / 2 + 0.5);
         mesh.translateY(-volume.yLength / 2 + 0.5);
         mesh.translateX(-volume.xLength / 2 + 0.5);
-        //re-orient
+        //orient & relocate as in RAS space        
         mesh.applyMatrix4(volume.matrix);
 
         mesh.visible = initVisibility;
         mesh.name = 'vol3D-mesh';
-        scene.add(mesh);
 
-        obj3d.current.vol3D = mesh;
+        //wrap 3D volume in a group to allow rescaling         
+        const wrapper = new THREE.Group();
+        wrapper.add(mesh);
+        //resize to RAS space
+        wrapper.scale.set(volume.spacing[0], volume.spacing[1], volume.spacing[2]);
+
+        scene.add(wrapper);
+        obj3d.current.vol3D = wrapper;
         obj3d.current.materialVol3D = material;
 
         obj3d.current.disposable.push(geometry, material, texture, cm_viridis);
@@ -1100,12 +1106,14 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     const initSlices = (scene: THREE.Scene, volume: Volume) => {
 
-        //box helper to see the extend of the volume
-        const geometry = new THREE.BoxGeometry(volume.xLength, volume.yLength, volume.zLength);
+        //the MRI box in RAS space
+        const geometry = new THREE.BoxGeometry(...volume.RASDimensions);
+
         const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
         //const material = new THREE.LineBasicMaterial( { color: 0x8080ff, fog: false, transparent: true, opacity: 0.6 } );
         const cube = new THREE.Mesh(geometry, material);
         cube.visible = false;
+        //box helper to see the extend of the volume
         const box = new THREE.BoxHelper(cube, 0xffff00);
         box.name = 'volMRI-box';
         obj3d.current.cube = cube;
@@ -1126,7 +1134,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         box.visible = false;
 
         //z plane
-        const initSliceZ = Math.floor(volume.dimensions[2] / 4);
+        const initSliceZ = Math.floor(volume.zLength / 4);
         const sliceZ = volume.extractSlice('z', initSliceZ);
         sliceZ.mesh.material.visible = showZSlice;
         sliceZ.mesh.layers.enable(3);
@@ -1145,10 +1153,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
         scene.add(sliceZ.mesh);
         obj3d.current.sliceZ = sliceZ;
         setIndexZ(obj3d.current.sliceZ.index);
-        setMaxIndexZ(volume.dimensions[2] - 1);
+        setMaxIndexZ(volume.zLength - 1);
 
         //y plane
-        const initSliceY = Math.floor(volume.dimensions[1] / 2);
+        const initSliceY = Math.floor(volume.yLength / 2);
         const sliceY = volume.extractSlice('y', initSliceY);
         sliceY.mesh.material.visible = showYSlice;
         sliceY.mesh.layers.enable(2);
@@ -1168,10 +1176,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
         scene.add(sliceY.mesh);
         obj3d.current.sliceY = sliceY;
         setIndexY(obj3d.current.sliceY.index);
-        setMaxIndexY(volume.dimensions[1] - 1);
+        setMaxIndexY(volume.yLength - 1);
 
         //x plane
-        const initSliceX = Math.floor(volume.dimensions[0] / 2);
+        const initSliceX = Math.floor(volume.xLength / 2);
         const sliceX = volume.extractSlice('x', initSliceX);
         sliceX.mesh.material.visible = showXSlice;
         sliceX.mesh.layers.enable(1);
@@ -1190,7 +1198,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         scene.add(sliceX.mesh);
         obj3d.current.sliceX = sliceX;
         setIndexX(obj3d.current.sliceX.index);
-        setMaxIndexX(volume.dimensions[0] - 1);
+        setMaxIndexX(volume.xLength - 1);
 
         //obj3d.current.sceneX.add(sliceX.mesh);
         setVolumeValMin(volume.min);
@@ -1201,26 +1209,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
         ]);
     };
 
-    const createLandMarks = () => {
-        const landmarkGroup = new THREE.Group();
-        landmarkGroup.name = 'landmarks-group';
-        const geom = new THREE.SphereGeometry(6, 4, 4);
-        const wireframe = new THREE.WireframeGeometry(geom);
-
-
-        for (const lm of knownLandMarksAry) {
-            const isNull = lm.coord[0] === 0 && lm.coord[1] === 0 && lm.coord[2] === 0;
-            if (isNull) continue;
-
-            const mat = new THREE.MeshBasicMaterial({ color: lm.color, side: THREE.FrontSide, transparent: true, opacity: 0.4 });
-            //const sphere = new THREE.Mesh(geom, mat)
-            const sphere = new THREE.LineSegments(wireframe, mat);
-            sphere.position.fromArray(lm.coord);
-            sphere.name = 'landmark-' + lm.id;
-            landmarkGroup.add(sphere);
-        }
-        return landmarkGroup;
-    }
 
     const initBrainModel = (scene: THREE.Scene, cameraPos: THREE.Vector3, bboxMax: number[], initVisibility: boolean) => {
 
@@ -1306,8 +1294,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     scene.add(brainModel);
                     obj3d.current.brainModel = brainModel;
 
-                    const landmarks = createLandMarks();
-                    landmarks.applyMatrix4(scaleTemplMatrix.invert());
+                    const landmarks = LandmarksManager.createLandMarkPlaceholders(knownLandMarksAry);
                     brainModel.add(landmarks);
 
                     const initialQ = new THREE.Quaternion();
@@ -1365,7 +1352,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.brModelPlainMats[2].clippingPlanes =
                     getClippingPlanes(StAtm.PlaneIndex.Z, obj3d.current.sliceZ.mesh.matrix.elements[14]);
             }
-            
+
         }
     };
 
@@ -1418,7 +1405,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     };
 
-    const getFrustumPlanes = (aspect: number, frustumHeight = 512) => {
+    const getFrustumPlanes = (aspect: number) => {
+        const frustumHeight = rtState.current.camDistance ? rtState.current.camDistance : 128;
         return {
             left: - frustumHeight * aspect / 2,
             right: frustumHeight * aspect / 2,
@@ -1466,9 +1454,11 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 const mriBbox = new THREE.Box3().setFromObject(obj3d.current.cube);
                 const mriBoxMinMax = { min: mriBbox.min.toArray(), max: mriBbox.max.toArray() };
                 setMRIBoxMinMax(mriBoxMinMax);
+                const mriBoxSize = new THREE.Vector3();
+                mriBbox.getSize(mriBoxSize);
 
-                const mboxZLen = mriBoxMinMax.max[2];
-                const camDistance = 6 * mboxZLen;
+                const mboxZLen = mriBoxSize.toArray()[2];
+                const camDistance = 2 * mboxZLen;
                 obj3d.current.camera.position.z = camDistance;
                 rtState.current.camDistance = camDistance;
                 obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
@@ -1513,11 +1503,10 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
                 const landmarksManager = new LandmarksManager(
-                    obj3d.current.marksGroup, {
-                    maxIndexX: volume.dimensions[0] - 1,
-                    maxIndexY: volume.dimensions[1] - 1,
-                    maxIndexZ: volume.dimensions[2] - 1
-                });
+                    obj3d.current.marksGroup,
+                    [volume.xLength - 1, volume.yLength - 1, volume.zLength - 1],
+                    volume.spacing,
+                );
                 setLandmarksManager(landmarksManager);
 
 
@@ -1585,7 +1574,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.sliceZCtrl && attachDragListeners(obj3d.current.dragCtrlZ, obj3d.current.sliceZCtrl);
                 //-----------------------------------------------------------------
 
-                initBrainModel(obj3d.current.scene, obj3d.current.camera.position, mriBbox.max.toArray(), false);
+                initBrainModel(obj3d.current.scene, obj3d.current.camera.position, mriBoxSize.toArray(), false);
                 setBrainModelMode(StAtm.BrainModelMode.Volume);
 
                 //-- controls for main view (no gizmos)

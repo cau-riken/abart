@@ -20,7 +20,7 @@ import {
  */
 function VolumeSlice( volume, index, axis ) {
 
-	var slice = this;
+	const slice = this;
 	/**
 	 * @member {Volume} volume The associated volume
 	 */
@@ -48,27 +48,22 @@ function VolumeSlice( volume, index, axis ) {
 	 */
 	this.axis = axis || 'z';
 
+	//FIXME what the point of having 2 canvases since both are offscreen (texture will only be updated if explicitely setting its needsUpdate to true)
 	/**
-	 * @member {HTMLCanvasElement} canvas The final canvas used for the texture
-	 */
-	/**
-	 * @member {CanvasRenderingContext2D} ctx Context of the canvas
+	 * @member {HTMLCanvasElement} canvas The final (offscreen) canvas used for the texture	
 	 */
 	this.canvas = document.createElement( 'canvas' );
 	/**
-	 * @member {HTMLCanvasElement} canvasBuffer The intermediary canvas used to paint the data
-	 */
-	/**
-	 * @member {CanvasRenderingContext2D} ctxBuffer Context of the canvas buffer
+	 * @member {HTMLCanvasElement} canvasBuffer The (offscreen) canvas used for intermediary to painting of the data (filtering)
 	 */
 	this.canvasBuffer = document.createElement( 'canvas' );
 	this.updateGeometry();
 
 
-	var canvasMap = new Texture( this.canvas );
+	const canvasMap = new Texture( this.canvas );
 	canvasMap.minFilter = LinearFilter;
 	canvasMap.wrapS = canvasMap.wrapT = ClampToEdgeWrapping;
-	var material = new MeshBasicMaterial( { map: canvasMap, side: DoubleSide, transparent: true } );
+	const material = new MeshBasicMaterial( { map: canvasMap, side: DoubleSide,  } );
 	/**
 	 * @member {Mesh} mesh The mesh ready to get used in the scene
 	 */
@@ -115,36 +110,37 @@ VolumeSlice.prototype = {
 
 		}
 
-		var iLength = this.iLength,
+		const iLength = this.iLength,
 			jLength = this.jLength,
 			sliceAccess = this.sliceAccess,
-			volume = this.volume,
-			canvas = this.canvasBuffer,
-			ctx = this.ctxBuffer;
+			volume = this.volume;
+		const ctxBuffer = this.canvasBuffer.getContext( '2d' );
 
+		// get the ImageData object from the intermediary canvas. It is where the updated image will be drawn.
+		const imgData = ctxBuffer.getImageData( 0, 0, iLength, jLength );
+		const data = imgData.data;
+		// source image data from the volume
+		const volumeData = volume.data;
 
-		// get the imageData and pixel array from the canvas
-		var imgData = ctx.getImageData( 0, 0, iLength, jLength );
-		var data = imgData.data;
-		var volumeData = volume.data;
-		var upperThreshold = volume.upperThreshold;
-		var lowerThreshold = volume.lowerThreshold;
-		var windowLow = volume.windowLow;
-		var windowHigh = volume.windowHigh;
+		//filter values to apply to the image 
+		const upperThreshold = volume.upperThreshold;
+		const lowerThreshold = volume.lowerThreshold;
+		const windowLow = volume.windowLow;
+		const windowHigh = volume.windowHigh;
 
 		// manipulate some pixel elements
-		var pixelCount = 0;
+		let pixelCount = 0;
 
-		if ( volume.dataType === 'label' ) {
+		if ( volume.kind === 'label' ) {
 
 			//this part is currently useless but will be used when colortables will be handled
-			for ( var j = 0; j < jLength; j ++ ) {
+			for ( let j = 0; j < jLength; j ++ ) {
 
-				for ( var i = 0; i < iLength; i ++ ) {
+				for ( let i = 0; i < iLength; i ++ ) {
 
-					var label = volumeData[ sliceAccess( i, j ) ];
+					let label = volumeData[ sliceAccess( i, j ) ];
 					label = label >= this.colorMap.length ? ( label % this.colorMap.length ) + 1 : label;
-					var color = this.colorMap[ label ];
+					const color = this.colorMap[ label ];
 					data[ 4 * pixelCount ] = ( color >> 24 ) & 0xff;
 					data[ 4 * pixelCount + 1 ] = ( color >> 16 ) & 0xff;
 					data[ 4 * pixelCount + 2 ] = ( color >> 8 ) & 0xff;
@@ -157,12 +153,12 @@ VolumeSlice.prototype = {
 
 		} else {
 
-			for ( var j = 0; j < jLength; j ++ ) {
+			for ( let j = 0; j < jLength; j ++ ) {
 
-				for ( var i = 0; i < iLength; i ++ ) {
+				for ( let i = 0; i < iLength; i ++ ) {
 
-					var value = volumeData[ sliceAccess( i, j ) ];
-					var alpha = 0xff;
+					let value = volumeData[ sliceAccess( i, j ) ];
+					let alpha = 0xff;
 					//apply threshold
 					alpha = upperThreshold >= value ? ( lowerThreshold <= value ? alpha : 0 ) : 0;
 					//apply window level
@@ -181,9 +177,13 @@ VolumeSlice.prototype = {
 
 		}
 
-		ctx.putImageData( imgData, 0, 0 );
-		this.ctx.drawImage( canvas, 0, 0, iLength, jLength, 0, 0, this.canvas.width, this.canvas.height );
+		//update intermediary canvas with filtered image
+		ctxBuffer.putImageData( imgData, 0, 0 );
 
+		const canvasBuffer = this.canvasBuffer;
+		//draw filtered image on the final canvas
+		const ctx = this.canvas.getContext( '2d' );
+		ctx.drawImage( canvasBuffer, 0, 0, iLength, jLength, 0, 0, this.canvas.width, this.canvas.height );
 
 		this.mesh.material.map.needsUpdate = true;
 
@@ -196,21 +196,21 @@ VolumeSlice.prototype = {
 	 */
 	updateGeometry: function () {
 
-		var extracted = this.volume.extractPerpendicularPlane( this.axis, this.index );
+		const extracted = this.volume.extractPerpendicularPlane( this.axis, this.index );
 		this.sliceAccess = extracted.sliceAccess;
 		this.jLength = extracted.jLength;
 		this.iLength = extracted.iLength;
 		this.matrix = extracted.matrix;
 
-		this.canvas.width = extracted.planeWidth;
-		this.canvas.height = extracted.planeHeight;
+		//canvas dimensions are same as source image (IJK space)
+		this.canvas.width = this.iLength;
+		this.canvas.height = this.jLength;
 		this.canvasBuffer.width = this.iLength;
 		this.canvasBuffer.height = this.jLength;
-		this.ctx = this.canvas.getContext( '2d' );
-		this.ctxBuffer = this.canvasBuffer.getContext( '2d' );
 
 		if ( this.geometry ) this.geometry.dispose(); // dispose existing geometry
 
+		//plane holding the slice has dimensions in RAS space
 		this.geometry = new PlaneGeometry( extracted.planeWidth, extracted.planeHeight );
 
 		if ( this.mesh ) {

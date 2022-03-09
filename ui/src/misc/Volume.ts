@@ -101,7 +101,7 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 			case 'unsigned long long int' :
 			case 'uint64' :
 			case 'uint64_t' :
-				throw 'Error in Volume constructor : this type is not supported in JavaScript';
+				throw new Error( 'Error in Volume constructor : this type is not supported in JavaScript' );
 				break;
 			case 'Float32' :
 			case 'float32' :
@@ -120,7 +120,7 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 
 		if ( this.data.length !== this.xLength * this.yLength * this.zLength ) {
 
-			throw 'Error in Volume constructor, lengths are not matching arrayBuffer size';
+			throw new Error( 'Error in Volume constructor, lengths are not matching arrayBuffer size' );
 
 		}
 
@@ -146,7 +146,7 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 	 * @member {number} lowerThreshold The voxels with values under this threshold won't appear in the slices.
 	 *                      If changed, geometryNeedsUpdate is automatically set to true on all the slices associated to this volume
 	 */
-	var lowerThreshold = - Infinity;
+	let lowerThreshold = - Infinity;
 	Object.defineProperty( this, 'lowerThreshold', {
 		get: function () {
 
@@ -168,7 +168,7 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 	 * @member {number} upperThreshold The voxels with values over this threshold won't appear in the slices.
 	 *                      If changed, geometryNeedsUpdate is automatically set to true on all the slices associated to this volume
 	 */
-	var upperThreshold = Infinity;
+	let upperThreshold = Infinity;
 	Object.defineProperty( this, 'upperThreshold', {
 		get: function () {
 
@@ -240,9 +240,9 @@ Volume.prototype = {
 	 */
 	reverseAccess: function ( index ) {
 
-		var z = Math.floor( index / ( this.yLength * this.xLength ) );
-		var y = Math.floor( ( index - z * this.yLength * this.xLength ) / this.xLength );
-		var x = index - z * this.yLength * this.xLength - y * this.xLength;
+		const z = Math.floor( index / ( this.yLength * this.xLength ) );
+		const y = Math.floor( ( index - z * this.yLength * this.xLength ) / this.xLength );
+		const x = index - z * this.yLength * this.xLength - y * this.xLength;
 		return [ x, y, z ];
 
 	},
@@ -259,10 +259,10 @@ Volume.prototype = {
 	 */
 	map: function ( functionToMap, context ) {
 
-		var length = this.data.length;
+		const length = this.data.length;
 		context = context || this;
 
-		for ( var i = 0; i < length; i ++ ) {
+		for ( let i = 0; i < length; i ++ ) {
 
 			this.data[ i ] = functionToMap.call( context, this.data[ i ], i, this.data );
 
@@ -279,26 +279,35 @@ Volume.prototype = {
 	 * @param {number}            index the index of the slice
 	 * @returns {Object} an object containing all the usefull information on the geometry of the slice
 	 */
-	extractPerpendicularPlane: function ( axis, RASIndex ) {
+	extractPerpendicularPlane: function ( axis : string, sliceIndex :number ) {
 
-		var iLength,
-			jLength,
-			sliceAccess,
-			planeMatrix = ( new Matrix4() ).identity(),
-			volume = this,
-			planeWidth,
+		let iLength,
+			jLength;
+
+		let	planeMatrix = new Matrix4();
+
+		let	volume = this;
+		let planeWidth,
 			planeHeight,
+			normalSpacing,
 			firstSpacing,
 			secondSpacing,
-			positionOffset,
-			IJKIndex;
+			positionOffset;
 
-		var axisInIJK = new Vector3(),
-			firstDirection = new Vector3(),
+		let IJKIndex;
+			//get index (in the volume single dimension data array) of the i,j voxel of this slice 
+			let ij2PixelAccess : (i: number, j : number) => number;
+			
+		//with NRRD format, axes order is variable (unlike with NIfTI where it is always x, y, z), hence it need to be translated
+		const axisInIJK = new Vector3();
+
+		const firstDirection = new Vector3(),
 			secondDirection = new Vector3();
 
-		var dimensions = new Vector3( this.xLength, this.yLength, this.zLength );
+		//volume IJK dimensions
+		const dimensions = new Vector3( this.xLength, this.yLength, this.zLength );
 
+		planeMatrix.extractRotation(volume.matrix);
 
 		switch ( axis ) {
 
@@ -308,11 +317,15 @@ Volume.prototype = {
 				secondDirection.set( 0, - 1, 0 );
 				firstSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
 				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'y' ) ];
-				IJKIndex = new Vector3( RASIndex, 0, 0 );
+				ij2PixelAccess = (i, j) =>  volume.access( sliceIndex, (volume.yLength - 1 - j),  (volume.zLength - 1 - i) );
 
+				//rotate so the plane is orthogonal to X Axis
 				planeMatrix.multiply( ( new Matrix4() ).makeRotationY( Math.PI / 2 ) );
-				positionOffset = ( volume.RASDimensions[ 0 ] - 1 ) / 2;
-				planeMatrix.setPosition( new Vector3( RASIndex - positionOffset, 0, 0 ) );
+
+				normalSpacing = this.spacing[ this.axisOrder.indexOf( 'x' ) ];
+				//middle slice will be located at the origin 
+				positionOffset = (volume.RASDimensions[ 0 ] - normalSpacing) / 2;
+				planeMatrix.setPosition( new Vector3( sliceIndex * normalSpacing - positionOffset, 0, 0 ) );
 				break;
 			case 'y' :
 				axisInIJK.set( 0, 1, 0 );
@@ -320,11 +333,15 @@ Volume.prototype = {
 				secondDirection.set( 0, 0, 1 );
 				firstSpacing = this.spacing[ this.axisOrder.indexOf( 'x' ) ];
 				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
-				IJKIndex = new Vector3( 0, RASIndex, 0 );
+				ij2PixelAccess = (i, j) =>  volume.access( i, sliceIndex, j );
 
+				//rotate so the plane is orthogonal to Y Axis
 				planeMatrix.multiply( ( new Matrix4() ).makeRotationX( - Math.PI / 2 ) );
-				positionOffset = ( volume.RASDimensions[ 1 ] - 1 ) / 2;
-				planeMatrix.setPosition( new Vector3( 0, RASIndex - positionOffset, 0 ) );
+
+				normalSpacing = this.spacing[ this.axisOrder.indexOf( 'y' ) ];
+				//middle slice will be located at the origin 
+				positionOffset = ( volume.RASDimensions[ 1 ] - normalSpacing)  / 2;
+				planeMatrix.setPosition( new Vector3(0,  sliceIndex * normalSpacing - positionOffset, 0 ) );
 				break;
 			case 'z' :
 			default :
@@ -333,65 +350,37 @@ Volume.prototype = {
 				secondDirection.set( 0, - 1, 0 );
 				firstSpacing = this.spacing[ this.axisOrder.indexOf( 'x' ) ];
 				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'y' ) ];
-				IJKIndex = new Vector3( 0, 0, RASIndex );
+				ij2PixelAccess = (i, j) =>  volume.access( i, (volume.yLength - 1 - j), sliceIndex );
 
-				positionOffset = ( volume.RASDimensions[ 2 ] - 1 ) / 2;
-				planeMatrix.setPosition( new Vector3( 0, 0, RASIndex - positionOffset ) );
+				//newly create planed is already orthogonal to Z Axis
+
+				normalSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
+				//middle slice will be located at the origin 
+				positionOffset =  (volume.RASDimensions[ 2 ] - normalSpacing)  / 2;
+				planeMatrix.setPosition( new Vector3( 0, 0, sliceIndex * normalSpacing - positionOffset ) );
+
 				break;
 
 		}
 
 		firstDirection.applyMatrix4( volume.inverseMatrix ).normalize();
-		firstDirection.argVar = 'i';
 		secondDirection.applyMatrix4( volume.inverseMatrix ).normalize();
-		secondDirection.argVar = 'j';
-		axisInIJK.applyMatrix4( volume.inverseMatrix ).normalize();
 		iLength = Math.floor( Math.abs( firstDirection.dot( dimensions ) ) );
 		jLength = Math.floor( Math.abs( secondDirection.dot( dimensions ) ) );
+		//plane dimension in RAS space
 		planeWidth = Math.abs( iLength * firstSpacing );
 		planeHeight = Math.abs( jLength * secondSpacing );
 
-		IJKIndex = Math.abs( Math.round( IJKIndex.applyMatrix4( volume.inverseMatrix ).dot( axisInIJK ) ) );
-		var base = [ new Vector3( 1, 0, 0 ), new Vector3( 0, 1, 0 ), new Vector3( 0, 0, 1 ) ];
-		var iDirection = [ firstDirection, secondDirection, axisInIJK ].find( function ( x ) {
-
-			return Math.abs( x.dot( base[ 0 ] ) ) > 0.9;
-
-		} );
-		var jDirection = [ firstDirection, secondDirection, axisInIJK ].find( function ( x ) {
-
-			return Math.abs( x.dot( base[ 1 ] ) ) > 0.9;
-
-		} );
-		var kDirection = [ firstDirection, secondDirection, axisInIJK ].find( function ( x ) {
-
-			return Math.abs( x.dot( base[ 2 ] ) ) > 0.9;
-
-		} );
-
-		sliceAccess = function ( i, j ) {
-
-			var accessI, accessJ, accessK;
-
-			var si = ( iDirection === axisInIJK ) ? IJKIndex : ( iDirection.argVar === 'i' ? i : j );
-			var sj = ( jDirection === axisInIJK ) ? IJKIndex : ( jDirection.argVar === 'i' ? i : j );
-			var sk = ( kDirection === axisInIJK ) ? IJKIndex : ( kDirection.argVar === 'i' ? i : j );
-
-			// invert indices if necessary
-
-			var accessI = ( iDirection.dot( base[ 0 ] ) > 0 ) ? si : ( volume.xLength - 1 ) - si;
-			var accessJ = ( jDirection.dot( base[ 1 ] ) > 0 ) ? sj : ( volume.yLength - 1 ) - sj;
-			var accessK = ( kDirection.dot( base[ 2 ] ) > 0 ) ? sk : ( volume.zLength - 1 ) - sk;
-
-			return volume.access( accessI, accessJ, accessK );
-
-		};
-
 		return {
+			//slice of the canvas to draw slice image (image dimension in voxels)
 			iLength: iLength,
 			jLength: jLength,
-			sliceAccess: sliceAccess,
+
+			sliceAccess: ij2PixelAccess,
+
+			//matrix applied to the geometry to translate/scale the slice in RAS space
 			matrix: planeMatrix,
+			//size of the plane geometry holding the slice (size in RAS space)
 			planeWidth: planeWidth,
 			planeHeight: planeHeight
 		};
@@ -408,7 +397,7 @@ Volume.prototype = {
 	 */
 	extractSlice: function ( axis, index ) {
 
-		var slice = new VolumeSlice( this, index, axis );
+		const slice = new VolumeSlice( this, index, axis );
 		this.sliceList.push( slice );
 		return slice;
 
@@ -439,19 +428,19 @@ Volume.prototype = {
 	 */
 	computeMinMax: function () {
 
-		var min = Infinity;
-		var max = - Infinity;
+		let min = Infinity;
+		let max = - Infinity;
 
 		// buffer the length
-		var datasize = this.data.length;
+		const datasize = this.data.length;
 
-		var i = 0;
+		let i = 0;
 
 		for ( i = 0; i < datasize; i ++ ) {
 
 			if ( ! isNaN( this.data[ i ] ) ) {
 
-				var value = this.data[ i ];
+				const value = this.data[ i ];
 				min = Math.min( min, value );
 				max = Math.max( max, value );
 

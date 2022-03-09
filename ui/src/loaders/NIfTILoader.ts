@@ -11,6 +11,7 @@ import {
 import { Volume } from '../misc/Volume';
 
 import * as Nifti from "nifti-reader-js";
+import { rowArrayToMatrix4 } from '../components/Utils';
 
 class NIfTILoader extends Loader {
 
@@ -101,6 +102,74 @@ class NIfTILoader extends Loader {
 		};
 
 
+		type AffineTransformInfo = {
+			//type of transform as specified by in qform_code or sform_code
+			//( Nifti.NIFTI1.XFORM_SCANNER_ANAT | XFORM_ALIGNED_ANAT | XFORM_TALAIRACH | XFORM_MNI_152 )
+			transformType: number,
+			//rotation/reflection matrix (no scaling/translation)
+			affine: Matrix4,
+			//spacing between slices in RAS space (in mm)
+			spacings: number[],
+		}
+
+		const infoUsingMethod2 = (niftiHeader, lengthFactor: number) => {
+			let result: AffineTransformInfo | undefined;
+			if (niftiHeader.qform_code > 0) {
+				//NIfTI header doesn't contain affine matrix, must use Q-form params instead to create the matrix
+
+				//should be either -1 or 1, any different value treated as 1
+				const qfac = niftiHeader.pixDims[0] === -1 ? -1 : 1;
+				//FIXME not using qfac
+				(qfac === -1) && console.error("qfac was -1");
+
+				const [b, c, d] = [niftiHeader.quatern_b, niftiHeader.quatern_c, niftiHeader.quatern_d];
+				const a = Math.sqrt(1.0 - (b * b + c * c + d * d));
+
+				const affine = new Matrix4()
+					.makeRotationFromQuaternion(new Quaternion(a, b, c, d));
+
+				//FIXME not using position offsets
+				//const pos = new Vector3(niftiHeader.qoffset_x, niftiHeader.qoffset_y, niftiHeader.qoffset_z);
+				//affine.setPosition(pos);
+
+				//reset offset
+				affine.setPosition(0, 0, 0);
+
+				//spacings between slices readily available from the header (just convert to mm)
+				const spacings = niftiHeader.pixDims.slice(1, 4).map(s => s * lengthFactor);
+
+				result = { affine, spacings, transformType: niftiHeader.qform_code };
+			}
+			return result;
+		};
+
+		const infoUsingMethod3 = (niftiHeader, lengthFactor: number) => {
+			let result: AffineTransformInfo | undefined;
+			if (niftiHeader.sform_code > 0) {
+				//NIfTI header contains transform matrix
+				const headerAffine = rowArrayToMatrix4(niftiHeader.affine);
+
+				const affine = new Matrix4()
+					.extractRotation(headerAffine);
+
+				//FIXME not using position offsets
+				//const pos = new Vector3().setFromMatrixPosition(niftiHeader.affine);
+				//affine.setPosition(pos);
+
+				//pixdim from header not used in this method (see https://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1.h )
+				const spacings0 = [Math.abs(niftiHeader.affine[0][0]), Math.abs(niftiHeader.affine[1][1]), Math.abs(niftiHeader.affine[2][2])];
+
+				const org = new Vector3(0, 0, 0).applyMatrix4(headerAffine);
+				const unit = new Vector3(1, 1, 1).applyMatrix4(headerAffine);
+				const spacings = unit.sub(org).toArray().map(s => Math.abs(s))
+					.map(s => s * lengthFactor);
+
+				result = { affine, spacings, transformType: niftiHeader.sform_code };
+			}
+			return result;
+		};
+
+
 		// .. let's use the underlying array buffer
 		let data = _data;
 		let volume;
@@ -114,49 +183,53 @@ class NIfTILoader extends Loader {
 			//console.log(niftiHeader);
 			console.log(niftiHeader.toFormattedString());
 
-			const qfac = niftiHeader.pixDims[0];
+			//Convention: in the viewer, drawing space is assumed to be RAS space using millimeters as length unit.
+			const spatialUnit = Nifti.NIFTI1.SPATIAL_UNITS_MASK & niftiHeader.xyzt_units;
+			const lengthFactor =
+				(spatialUnit === Nifti.NIFTI1.UNITS_MM)
+					? 1 :
+					(spatialUnit === Nifti.NIFTI1.UNITS_METER)
+						? 1000 :
+						(spatialUnit === Nifti.NIFTI1.UNITS_MICRON)
+							? 0.001
+							: //should not happen
+							1;
+
+			console.log('lengthFactor', lengthFactor);
+			//
+			const dimensions = [niftiHeader.dims[1], niftiHeader.dims[2], niftiHeader.dims[3]];
+			let spacings: number[];
 			let affine: Matrix4;
-			//NIfTI header can specify affine in one of three ways
+
+			//NIfTI header can specify affine transform  in one of three ways
 			//see https://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1.h
-			if (niftiHeader.qform_code === 0) {
-				console.log('METHOD 1 - "old way"');
-				const errorInitEvent: ErrorEventInit = {
-					error: new Error('NIFTIParseError'),
-					message: 'Unable to process this NIfTI file (METHOD 1, qform_code = 0)',
-					lineno: 0,
-					colno: 0,
-					filename: ''
-				};
+			const infoMethod2 = infoUsingMethod2(niftiHeader, lengthFactor);
+			const infoMethod3 = infoUsingMethod3(niftiHeader, lengthFactor);
 
-				onError && onError(new ErrorEvent('NIFTILoadError', errorInitEvent));
-				return;
+			if (infoMethod2 || infoMethod3) {
 
-			} else if (niftiHeader.qform_code > 0) {
-				//the affine natrix is null, should use Q-form instead
-				console.log('METHOD 2 - "normal" case');
+				let preferredMethod: AffineTransformInfo | undefined;;
+				if (infoMethod2 && typeof infoMethod3 === 'undefined') {
+					preferredMethod = infoMethod2;
+				} else if (infoMethod3 && typeof infoMethod2 === 'undefined') {
+					preferredMethod = infoMethod3;
+				} else {
+					//both S-form and Q-form are defined
+					preferredMethod = infoMethod3;
 
-				//FIXME not using a-form offsets : qoffset_x, qoffset_y, qoffset_z
-				const [b, c, d] = [niftiHeader.quatern_b, niftiHeader.quatern_c, niftiHeader.quatern_d];
-				const a = Math.sqrt(1.0 - (b * b + c * c + d * d))
-				affine = new Matrix4().makeRotationFromQuaternion(new Quaternion(a, b, c, d));
-
-			} else if (niftiHeader.sform_code > 0) {
-				console.log("METHOD 3");
-
-				//FIXME identity matrix for now
-				affine = new Matrix4();
-				{
-					//apply mirroring if necessary
-					const i = niftiHeader.affine[0][0];
-					const j = niftiHeader.affine[1][1];
-					const k = niftiHeader.affine[2][2];
-
-					affine.set(
-						Math.sign(i), 0, 0, 0,
-						0, Math.sign(j), 0, 0,
-						0, 0, Math.sign(k), 0,
-						0, 0, 0, 1);
 				}
+				affine = preferredMethod.affine;
+				spacings = preferredMethod.spacings;
+
+
+			} else if (niftiHeader.qform_code === 0) {
+				console.log('METHOD 1 - "old way"');
+
+				//No orientation specified in the header, world coordinates are determined simply by scaling by the voxel size
+				affine = new Matrix4().identity();
+
+				//spacings between slices are voxel sizes specified in the header 
+				spacings = niftiHeader.pixDims.slice(1, 4).map(s => s * lengthFactor);
 
 			} else {
 				//should not happen
@@ -205,38 +278,32 @@ class NIfTILoader extends Loader {
 
 				// get the image dimensions
 
-				//FIXME only space dimension
+				//FIXME limited to 3 space dimensions (not time)
 				const nbDimension = Math.min(niftiHeader.dims[0], 3)
 				//FIXME Assume 3 space dimensions here...
-				volume.dimensions = [niftiHeader.dims[1], niftiHeader.dims[2], niftiHeader.dims[3]];
-				volume.xLength = volume.dimensions[0];
-				volume.yLength = volume.dimensions[1];
-				volume.zLength = volume.dimensions[2];
+				//Width of the volume in the IJK coordinate system
+				volume.xLength = dimensions[0];
+				//Height of the volume in the IJK coordinate system
+				volume.yLength = dimensions[1];
+				//Depth of the volume in the IJK coordinate system
+				volume.zLength = dimensions[2];
 
-				// axis order fixed in nifti
+				// axis order is fixed in NIfTI1 (RAS+)
 				volume.axisOrder = ['x', 'y', 'z'];
 
 				//--------------------------------------
 				// FIXME: for this prototype, let's assume IJK and RAS are identical for now...
 
 				// spacing
-				/*
-				const spacingX = niftiHeader.pixDims[1];
-				const spacingY = niftiHeader.pixDims[2];
-				const spacingZ = niftiHeader.pixDims[3];
-				volume.spacing = [spacingX, spacingY, spacingZ];
-				*/
-
-				volume.spacing = [1, 1, 1];
+				volume.spacing = spacings;
 
 				// IJK to RAS and invert
 				volume.matrix = affine;
 
 				volume.inverseMatrix = volume.matrix.clone().invert();
 
-				volume.RASDimensions = new Vector4(volume.xLength, volume.yLength, volume.zLength, 0)
-					.applyMatrix4(volume.matrix)
-					.round().toArray().map(Math.abs).slice(0, 3);
+				//dimensions of the volume in the RAS space
+				volume.RASDimensions = [dimensions[0] * spacings[0], dimensions[1] * spacings[1], dimensions[2] * spacings[2]];
 
 
 				//FIXME volume.offset seems to be unused 

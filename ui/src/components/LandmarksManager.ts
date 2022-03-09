@@ -5,12 +5,14 @@ export type MarkInstance = {
     landmarkId: string,
     instanceId: string,
     coord: number[],
+    //slice indices (IJK space)
     indices: number[],
 }
 
 export type LandMark = {
     id: string,
     color: string,
+    //coordinate in RAS space
     coord: number[],
     name: string,
     longname: string,
@@ -32,14 +34,16 @@ class LandmarksManager {
 
     private static raycaster = new THREE.Raycaster();
 
-    private static bulletRadius = 4;
-    private static ringThickness = 2;
-    private static ringRadius = 5;
+    private static sf = 0.1;
+    private static bulletRadius = this.sf * 4;
+    private static bulletThickness = this.sf * 2;
+    private static ringThickness = this.sf * 1;
+    private static ringRadius = this.sf * 5;
 
     private static ringShape = new THREE.Shape(
         new THREE.EllipseCurve(
             0.0, 0.0,
-            this.ringRadius + 0.1, this.ringRadius + 0.1,
+            this.ringRadius + this.sf * 0.1, this.ringRadius + this.sf * 0.1,
             0.0, 2.0 * Math.PI,
             false, 0
         ).getSpacedPoints(64)
@@ -49,7 +53,7 @@ class LandmarksManager {
             new THREE.Shape(
                 new THREE.EllipseCurve(
                     0.0, 0.0,
-                    this.ringRadius + 0.05, this.ringRadius + 0.05,
+                    this.ringRadius + this.sf * 0.05, this.ringRadius + this.sf * 0.05,
                     0.0, 2.0 * Math.PI,
                     true, 0
                 ).getSpacedPoints(64))
@@ -61,8 +65,8 @@ class LandmarksManager {
             steps: 1,
             depth: this.ringThickness,
             bevelEnabled: true,
-            bevelThickness: 0.3,
-            bevelSize: 0.3,
+            bevelThickness: this.sf * 0.3,
+            bevelSize: this.sf * 0.3,
             bevelOffset: 0,
             bevelSegments: 1
         }
@@ -82,11 +86,11 @@ class LandmarksManager {
         ],
 
         planeGeoms: [
-            new THREE.CylinderGeometry(this.bulletRadius, this.bulletRadius, 1, 12)
+            new THREE.CylinderGeometry(this.bulletRadius, this.bulletRadius, this.bulletThickness, 12)
                 .applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, Math.PI / 2))),
-            new THREE.CylinderGeometry(this.bulletRadius, this.bulletRadius, 1, 12)
+            new THREE.CylinderGeometry(this.bulletRadius, this.bulletRadius, this.bulletThickness, 12)
                 .applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0))),
-            new THREE.CylinderGeometry(this.bulletRadius, this.bulletRadius, 1, 12)
+            new THREE.CylinderGeometry(this.bulletRadius, this.bulletRadius, this.bulletThickness, 12)
                 .applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, Math.PI / 2))),
         ],
 
@@ -189,16 +193,41 @@ class LandmarksManager {
         mark.position.fromArray(xyz);
         return mark;
     };
+   
+    public static createLandMarkPlaceholders = (landMarksDefs: LandMark[]) => {
+        const landmarkGroup = new THREE.Group();
+        landmarkGroup.name = 'landmarkplaceholders-group';
+        //FIXME dispose geom
+        const geom = new THREE.SphereGeometry(this.bulletRadius * 1.5, 4, 4);
+        const wireframe = new THREE.WireframeGeometry(geom);
+
+        for (const lm of landMarksDefs) {
+            const isNull = lm.coord[0] === 0 && lm.coord[1] === 0 && lm.coord[2] === 0;
+            if (isNull) continue;
+
+            const mat = new THREE.MeshBasicMaterial({ color: lm.color, side: THREE.FrontSide, transparent: true, opacity: 0.4 });
+            const sphere = new THREE.LineSegments(wireframe, mat);
+            sphere.position.fromArray(lm.coord);
+            sphere.name = 'landmark-' + lm.id;
+            landmarkGroup.add(sphere);
+        }
+        return landmarkGroup;
+    }
 
     // ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ 
     private maxs;
+    private voxelSizes;
     private selectedMarks;
     private marksGroup;
     private markInstances;
 
-    constructor(marksGroup: THREE.Group, maxs: { maxIndexX: number, maxIndexY: number, maxIndexZ: number }) {
+    constructor(
+        marksGroup: THREE.Group,
+        maxs: number[],
+        voxelSizes: number[],) {
         this.marksGroup = marksGroup;
         this.maxs = maxs;
+        this.voxelSizes = voxelSizes;
         this.selectedMarks = new Set<string>();
         this.markInstances = new Map<string, MarkInstance>()
     }
@@ -345,18 +374,19 @@ class LandmarksManager {
         /* 
         FIXME Assume Nifti affine transform is identity matrix.
 
-            * slices are centered at the origin, 
+            * slices are centered about the origin, 
             * slice thickness is 0, 
-            * slices are positionned at index coordinates +0.5 (world space units)
+            * slices are positionned in RAS space (at index coordinate * voxel size)
         */
         const [x, y, z] = point;
 
-        const { maxIndexX, maxIndexY, maxIndexZ } = this.maxs;
+        const [maxIndexX, maxIndexY, maxIndexZ] = this.maxs;
+        const [voxXSize, voxYSize, voxZSize] = this.voxelSizes;
         const midX = maxIndexX / 2, midY = maxIndexY / 2, midZ = maxIndexZ / 2;
 
-        let i = Math.round(x + midX);
-        let j = Math.round(y + midY);
-        let k = Math.round(z + midZ);
+        let i = Math.round(x / voxXSize + midX);
+        let j = Math.round(y / voxYSize + midY);
+        let k = Math.round(z / voxZSize + midZ);
         //keep value within slice boundaries
         if (i < 0) {
             i = 0;
@@ -373,7 +403,7 @@ class LandmarksManager {
         } else if (k > maxIndexZ) {
             k = maxIndexZ;
         }
-        return [i, j, k, i - midX, j - midY, k - midZ];
+        return [i, j, k, (i - midX) * voxXSize, (j - midY) * voxYSize, (k - midZ) * voxZSize];
 
     };
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SVD } from 'svd-js';
 
 import { LandMark, MarkInstance } from "./components/LandmarksManager";
+import { rowArrayToMatrix3 } from './components/Utils';
 
 
 /* compute the rotation that optimally align user defined landmarks with brain model ones.
@@ -29,7 +30,7 @@ export const getRotationToAlignLandmarks = (markInstances: MarkInstance[], landm
         //perform point alignment
         const rotationMatrix = getRotationToAlignPoints(userDefinedPoints, referencePoints);
         //convert to THREE affine transform matrix 
-        const rotMatrix3 = new THREE.Matrix4().setFromMatrix3(toMatrix3(rotationMatrix));
+        const rotMatrix3 = new THREE.Matrix4().setFromMatrix3(rowArrayToMatrix3(rotationMatrix));
         //
         rotQuat.setFromRotationMatrix(rotMatrix3);
     }
@@ -53,7 +54,7 @@ export const getRotationToAlignPoints = (userDefinedPoints: number[][], referenc
 
     //need to check if the determinant of V x Ut is negative
     //Note: svdH.v is already transposed (=Vt)
-    const determinant = toMatrix3(multiply(transpose(svdH.v), transpose(svdH.u))).determinant();
+    const determinant = rowArrayToMatrix3(multiply(transpose(svdH.v), transpose(svdH.u))).determinant();
 
     //R: get the rotation matrix (3x3)
     let rotationMatrix: number[][];
@@ -111,16 +112,4 @@ function centerPointsSet(m: number[][]) {
     // inplace modif 
     m.forEach(row => row.forEach((w, i) => row[i] -= colAvgs[i]));
     return colAvgs;
-};
-
-const toMatrix3 = (mat: number[][]) => {
-    const mat3 = new THREE.Matrix3();
-    mat3.set(
-        mat[0][0], mat[0][1], mat[0][2],
-        mat[1][0], mat[1][1], mat[1][2],
-        mat[2][0], mat[2][1], mat[2][2],
-    )
-    return mat3;
-};
-
-
+}
