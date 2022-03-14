@@ -295,8 +295,9 @@ Volume.prototype = {
 			positionOffset;
 
 		let IJKIndex;
-			//get index (in the volume single dimension data array) of the i,j voxel of this slice 
-			let ij2PixelAccess : (i: number, j : number) => number;
+
+		//get index (in the volume single dimension data array) of the i,j voxel of this slice 
+		let ij2PixelAccess : (i: number, j : number) => number;
 			
 		//with NRRD format, axes order is variable (unlike with NIfTI where it is always x, y, z), hence it need to be translated
 		const axisInIJK = new Vector3();
@@ -333,7 +334,13 @@ Volume.prototype = {
 				secondDirection.set( 0, 0, 1 );
 				firstSpacing = this.spacing[ this.axisOrder.indexOf( 'x' ) ];
 				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
-				ij2PixelAccess = (i, j) =>  volume.access( i, sliceIndex, j );
+				
+				const reverseIndex = 0 >= axisInIJK.applyMatrix4(volume.matrix).getComponent(1);
+				ij2PixelAccess = (reverseIndex) 
+					?
+						(i, j) =>  volume.access( i, (volume.yLength - 1 - sliceIndex), j )
+					:
+				 		(i, j) =>  volume.access( i, sliceIndex, j );
 
 				//rotate so the plane is orthogonal to Y Axis
 				planeMatrix.multiply( ( new Matrix4() ).makeRotationX( - Math.PI / 2 ) );
@@ -352,7 +359,7 @@ Volume.prototype = {
 				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'y' ) ];
 				ij2PixelAccess = (i, j) =>  volume.access( i, (volume.yLength - 1 - j), sliceIndex );
 
-				//newly create planed is already orthogonal to Z Axis
+				//newly created plane is already orthogonal to Z Axis
 
 				normalSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
 				//middle slice will be located at the origin 
@@ -378,7 +385,7 @@ Volume.prototype = {
 
 			sliceAccess: ij2PixelAccess,
 
-			//matrix applied to the geometry to translate/scale the slice in RAS space
+			//matrix applied to the geometry to translate the slice in RAS space
 			matrix: planeMatrix,
 			//size of the plane geometry holding the slice (size in RAS space)
 			planeWidth: planeWidth,
