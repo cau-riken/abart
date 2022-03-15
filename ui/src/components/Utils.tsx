@@ -1,4 +1,16 @@
 import * as THREE from 'three';
+import * as StAtm from '../StateAtoms';
+
+
+export const getNormPointer = (container: Element, clientX: number, clientY: number) => {
+    const rect = container.getBoundingClientRect();
+    return rect
+        ?
+        [(((clientX - rect.left) / rect.width) * 2 - 1), (- ((clientY - rect.top) / rect.height) * 2 + 1)]
+        :
+        [0, 0]
+        ;
+};
 
 
 export function setupAxesHelper(axisLength: number, scene: THREE.Scene) {
@@ -8,19 +20,11 @@ export function setupAxesHelper(axisLength: number, scene: THREE.Scene) {
     scene.add(axes);
 
     //create sprites for axes labels
-    const axesLabels = [
-        { label: 'A', pos: [0, axisLength, 0] },
-        { label: 'P', pos: [0, -axisLength, 0] },
-        { label: 'L', pos: [-axisLength, 0, 0] },
-        { label: 'R', pos: [axisLength, 0, 0] },
-        { label: 'I', pos: [0, 0, -axisLength] },
-        { label: 'S', pos: [0, 0, axisLength] },
-    ]
-
-    axesLabels.forEach(def => {
-        const sprite = createTextSprite(def.label);
+    StAtm.Axes.forEach((info, pov)=> {
+        const sprite = createTextSprite(info.label);
         if (sprite) {
-            sprite.position.fromArray(def.pos);
+            sprite.position.copy(info.dir.clone().multiplyScalar(axisLength));
+            sprite.userData = { isAxisSign: true, axis: pov };
             scene.add(sprite);
         }
     });

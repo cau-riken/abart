@@ -3,6 +3,7 @@ import { useAtom } from "jotai";
 
 
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
 
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
@@ -34,7 +35,7 @@ import { PickingMode } from "./LandmarksManager";
 
 import "./VolumePreview.scss";
 
-import { newXRayGlowingMaterial, setupAxesHelper } from './Utils';
+import { getNormPointer, newXRayGlowingMaterial, setupAxesHelper } from './Utils';
 import { Volume } from "../misc/Volume";
 import { VolumeSlice } from "../misc/VolumeSlice";
 import LandmarksManager, { CreateLandMarkOptions } from "./LandmarksManager";
@@ -161,7 +162,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [isLoading, setIsLoading] = useAtom(StAtm.isLoading);
     const [volumeLoaded, setVolumeLoaded] = useAtom(StAtm.volumeLoaded);
     const [volumeFile,] = useAtom(StAtm.volumeFile);
-    const [overlayUrl, ] = useAtom(StAtm.overlayUrl);
+    const [overlayUrl,] = useAtom(StAtm.overlayUrl);
 
     const [alertMessage, setAlertMessage] = useAtom(StAtm.alertMessage);
 
@@ -209,6 +210,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [markInstances, setMarkInstances] = useAtom(StAtm.markInstances);
     const [highMarks, setHighMarks] = useAtom(StAtm.highMarks);
 
+    const [animateTransition, setAnimateTransition] = React.useState(false);
     const [sliceRendPosIndices, setSliceRendPosIndices] = React.useState([2, 0, 1]);
 
     const [mriBoxMinMax, setMRIBoxMinMax] = React.useState({ min: [0, 0, 0], max: [0, 0, 0] });
@@ -345,45 +347,126 @@ const VolumePreview = (props: VolumePreviewProps) => {
     }, [brainModelMode]);
 
 
+    const changeCameraPOV = (toPosition: THREE.Vector3, toUp: THREE.Vector3, withControlReset?: boolean) => {
+        if (obj3d.current.camera && obj3d.current.controls) {
+            withControlReset && obj3d.current.controls.reset();
+            obj3d.current.camera.up.copy(toUp);
+            obj3d.current.camera.position.copy(toPosition);
+            obj3d.current.camera.lookAt(0, 0, 0);
+
+            updateBrainModelRotation();
+            setCameraPOV(StAtm.CameraPOV.Free);
+        }
+    }
+
     React.useEffect(() => {
-        if (obj3d.current.controls && rtState.current.camDistance) {
+        if (obj3d.current.camera && obj3d.current.controls && rtState.current.camDistance) {
 
-            let cameraRotation;
-            switch (cameraPOV) {
-                default:
-                case StAtm.CameraPOV.Free:
-                    cameraRotation = undefined;
-                    break;
-                case StAtm.CameraPOV.Left:
-                    cameraRotation = { up: [0, 0, 1], position: [- rtState.current.camDistance, 0, 0] };
-                    break;
-                case StAtm.CameraPOV.Right:
-                    cameraRotation = { up: [0, 0, 1], position: [rtState.current.camDistance, 0, 0] };
-                    break;
-                case StAtm.CameraPOV.Posterior:
-                    cameraRotation = { up: [0, 0, 1], position: [0, - rtState.current.camDistance, 0] };
-                    break;
-                case StAtm.CameraPOV.Anterior:
-                    cameraRotation = { up: [0, 0, 1], position: [0, rtState.current.camDistance, 0] };
-                    break;
-                case StAtm.CameraPOV.Inferior:
-                    cameraRotation = { up: [0, 1, 0], position: [0, 0, - rtState.current.camDistance] };
-                    break;
-                case StAtm.CameraPOV.Superior:
-                    cameraRotation = { up: [0, 1, 0], position: [0, 0, rtState.current.camDistance] };
-                    break;
-
-            }
+            const cameraRotation = StAtm.CameraRotations.get(cameraPOV);
             if (cameraRotation) {
-                obj3d.current.controls.reset();
-                obj3d.current.camera?.up.fromArray(cameraRotation.up);
-                obj3d.current.camera?.position.fromArray(cameraRotation.position);
-                obj3d.current.camera?.lookAt(0, 0, 0);
+                const targetPosition = cameraRotation.dir.clone().multiplyScalar(rtState.current.camDistance);
 
-                updateBrainModelRotation();
-                setCameraPOV(StAtm.CameraPOV.Free);
+                if (!animateTransition) {
+                    changeCameraPOV(targetPosition, cameraRotation.up, true);
 
-                renderAll();
+                } else {
+                    //animated transition duration in ms
+                    const duration = 600;
+
+                    //find which fixed cameraPOV is closest to current camera position?
+                    const currentNormPos = new THREE.Vector3().copy(obj3d.current.camera.position).divideScalar(rtState.current.camDistance);
+                    const closest =
+                        [...StAtm.CameraRotations.entries()]
+                            .map(([pov, info]) => { return { pov, info, dist: currentNormPos.distanceTo(info.dir) }; })
+                            .reduce(
+                                (prev, curr) => {
+                                    if (prev) {
+
+                                        if (curr.dist < prev.dist) {
+                                            return curr;
+                                        }
+                                    }
+                                    return prev;
+                                }
+                            )
+
+
+                    if (closest.pov === cameraPOV && closest.dist < 0.45) {
+                        //not worth animating the transition
+                        changeCameraPOV(targetPosition, cameraRotation.up);
+
+                    } else {
+                        let mainTween;
+
+                        //Is itr possible to directly transit to target or is an intermediate step necessary?
+                        if (closest.info.direct.includes(cameraPOV)) {
+
+                            //transition can be done directly in a single step
+                            mainTween =
+                                new TWEEN.Tween(obj3d.current.camera.position)
+                                    .to(targetPosition, duration)
+                                    .onUpdate(target => {
+                                        obj3d.current.camera && obj3d.current.camera.lookAt(0, 0, 0);
+                                        updateBrainModelRotation();
+                                    })
+                                    .onComplete(target => {
+                                        obj3d.current.controls && (obj3d.current.controls.enabled = true);
+                                        //ensure final position is reached
+                                        changeCameraPOV(targetPosition, cameraRotation.up);
+                                    });
+
+
+                        } else {
+                            //need to transit through an intermediary step if camera POV change would change one single coordinate, 
+                            //(which won't show any gradual change since the camera is orthographic)
+
+                            const intermediate = StAtm.intermediatePositions.find(ip => ip.fromTo.includes(closest.pov) && ip.fromTo.includes(cameraPOV));
+                            const intermediatePos = intermediate
+                                ?
+                                intermediate.between.clone().multiplyScalar(rtState.current.camDistance)
+                                :
+                                new THREE.Vector3();
+
+                            mainTween =
+                                new TWEEN.Tween(obj3d.current.camera.position)
+                                    .to(intermediatePos, duration / 2)
+                                    .onUpdate(target => {
+                                        obj3d.current.camera && obj3d.current.camera.lookAt(0, 0, 0);
+                                    })
+                                    .chain(
+                                        new TWEEN.Tween(obj3d.current.camera.position)
+                                            .to(targetPosition, duration / 2)
+                                            .onUpdate(target => {
+                                                obj3d.current.camera && obj3d.current.camera.lookAt(0, 0, 0);
+                                                updateBrainModelRotation();
+                                            })
+                                            .onComplete(target => {
+                                                //restore controls
+                                                obj3d.current.controls && (obj3d.current.controls.enabled = true);
+                                                //ensure final position is reached
+                                                changeCameraPOV(targetPosition, cameraRotation.up);
+                                            })
+                                    );
+                        }
+
+                        //animate camera up 
+                        new TWEEN.Tween(obj3d.current.camera.up)
+                            .to(cameraRotation.up, duration)
+                            .easing(TWEEN.Easing.Quadratic.Out)
+                            .start();
+
+                        //animation loop iterates until last tween step
+                        const animate = () => {
+                            TWEEN.update() && requestAnimationFrame(animate);
+                            renderAll();
+                        }
+                        //disable controls while animating transition
+                        obj3d.current.controls.enabled = false;
+                        mainTween.start();
+                        //start animation loop
+                        animate();
+                    }
+                }
             }
         }
     }, [cameraPOV]);
@@ -644,6 +727,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         setVolumeLoaded(false);
         setViewMode(StAtm.ViewMode.None);
+        setAnimateTransition(false);
         setCameraPOV(StAtm.CameraPOV.Free);
 
         setDeltaRotation([0, 0, 0]);
@@ -668,6 +752,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         setVolumeValMin(0);
         setVolumeValMax(1);
         setVolumeRange([0, 1]);
+        setVolumeMixRatio(1);
 
         setShowXSlice(false);
         setShowYSlice(false);
@@ -723,6 +808,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         setVolumeLoaded(true);
                         setIsLoading(false);
                         setTimeout(renderAll, 150);
+                        setAnimateTransition(true);
 
 
                     },
@@ -1656,6 +1742,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             obj3d.current.camera2 = camera2;
             obj3d.current.scene2 = scene2;
         }
+        obj3d.current.controls?.reset();
     };
     //---------------------------------------------------------------------
     const focusOnMark = (landmarkId: string) => {
@@ -1669,9 +1756,31 @@ const VolumePreview = (props: VolumePreviewProps) => {
     };
 
     const refreshNormPointer = (container: Element, clientX: number, clientY: number) => {
-        const rect = container.getBoundingClientRect();
-        rtState.current.normPointer.x = rect ? (((clientX - rect.left) / rect.width) * 2 - 1) : 0;
-        rtState.current.normPointer.y = rect ? (- ((clientY - rect.top) / rect.height) * 2 + 1) : 0;
+        const coords = getNormPointer(container, clientX, clientY);
+        rtState.current.normPointer.x = coords[0];
+        rtState.current.normPointer.y = coords[1];
+    };
+
+    const onInsetRendererClick = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+        const coords = getNormPointer(event.currentTarget, event.clientX, event.clientY);
+
+        if (obj3d.current.scene2 && obj3d.current.camera2) {
+            //update the picking ray with the camera and pointer position
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2().fromArray(coords), obj3d.current.camera2);
+
+            // find objects intersecting the picking ray
+            const intersects = raycaster.intersectObjects(obj3d.current.scene2.children);
+
+            for (let i = 0; i < intersects.length; i++) {
+                const ntrsect = intersects[i];
+                if (ntrsect.object?.visible && ntrsect.object.userData?.isAxisSign) {
+                    //if axis sign is clicked, change cameraPOV accordingly
+                    setCameraPOV(ntrsect.object.userData.axis);
+                    break;
+                }
+            }
+        }
     };
 
     const onRendererClick = (
@@ -2020,7 +2129,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 style={{
                                     width: '100%',
                                     height: '100%',
-                                    backgroundColor: 'transparent',
+                                    backgroundColor: '#00000047',
                                     border: 'none',
                                     margin: 'auto',
                                     padding: 0,
@@ -2076,8 +2185,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 visibility: (viewMode != StAtm.ViewMode.Slice2D ? 'visible' : 'hidden'),
                                 width: 100,
                                 height: 100,
-                                backgroundColor: 'transparent', /* or transparent; will show through only if renderer alpha: true */
-                                border: 'none',
+                                backgroundColor: '#0000001c', /* or transparent; will show through only if renderer alpha: true */
+                                borderRadius: 100,
                                 margin: 0,
                                 padding: 0,
                                 position: 'absolute',
@@ -2085,6 +2194,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 bottom: 10,
                                 zIndex: 100,
                             }}
+                            onClick={(event) => onInsetRendererClick(event)}
                         >
                         </div>
                         {/* 2D slices views */}
