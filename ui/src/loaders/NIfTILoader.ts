@@ -3,8 +3,8 @@ import {
 	Loader,
 	LoadingManager,
 	Matrix4,
-	Vector4,
 	Quaternion,
+	Vector3,
 } from 'three';
 
 //import { Volume } from 'three/examples/jsm/misc/Volume.js';

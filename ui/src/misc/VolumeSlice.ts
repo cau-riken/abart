@@ -18,7 +18,7 @@ import {
  * @param   {string}       [axis='z']      For now only 'x', 'y' or 'z' but later it will change to a normal vector
  * @see Volume
  */
-function VolumeSlice( volume, index, axis ) {
+function VolumeSlice(volume, index, axis) {
 
 	const slice = this;
 	/**
@@ -29,45 +29,44 @@ function VolumeSlice( volume, index, axis ) {
 	 * @member {Number} index The index of the slice, if changed, will automatically call updateGeometry at the next repaint
 	 */
 	index = index || 0;
-	Object.defineProperty( this, 'index', {
+	Object.defineProperty(this, 'index', {
 		get: function () {
 
 			return index;
 
 		},
-		set: function ( value ) {
+		set: function (value) {
 
 			index = value;
 			slice.geometryNeedsUpdate = true;
 			return index;
 
 		}
-	} );
+	});
 	/**
 	 * @member {String} axis The normal axis
 	 */
 	this.axis = axis || 'z';
 
-	//FIXME what the point of having 2 canvases since both are offscreen (texture will only be updated if explicitely setting its needsUpdate to true)
 	/**
 	 * @member {HTMLCanvasElement} canvas The final (offscreen) canvas used for the texture	
 	 */
-	this.canvas = document.createElement( 'canvas' );
+	this.canvas = document.createElement('canvas');
 	/**
 	 * @member {HTMLCanvasElement} canvasBuffer The (offscreen) canvas used for intermediary to painting of the data (filtering)
 	 */
-	this.canvasBuffer = document.createElement( 'canvas' );
+	this.canvasBuffer = document.createElement('canvas');
 	this.updateGeometry();
 
 
-	const canvasMap = new Texture( this.canvas );
+	const canvasMap = new Texture(this.canvas);
 	canvasMap.minFilter = LinearFilter;
 	canvasMap.wrapS = canvasMap.wrapT = ClampToEdgeWrapping;
-	const material = new MeshBasicMaterial( { map: canvasMap, side: DoubleSide,  } );
+	const material = new MeshBasicMaterial({ map: canvasMap, side: DoubleSide, });
 	/**
 	 * @member {Mesh} mesh The mesh ready to get used in the scene
 	 */
-	this.mesh = new Mesh( this.geometry, material );
+	this.mesh = new Mesh(this.geometry, material);
 	this.mesh.matrixAutoUpdate = false;
 	/**
 	 * @member {Boolean} geometryNeedsUpdate If set to true, updateGeometry will be triggered at the next repaint
@@ -104,86 +103,88 @@ VolumeSlice.prototype = {
 	 */
 	repaint: function () {
 
-		if ( this.geometryNeedsUpdate ) {
-
+		if (this.geometryNeedsUpdate) {
 			this.updateGeometry();
-
 		}
 
 		const iLength = this.iLength,
 			jLength = this.jLength,
-			sliceAccess = this.sliceAccess,
 			volume = this.volume;
-		const ctxBuffer = this.canvasBuffer.getContext( '2d' );
+		const ctxBuffer = this.canvasBuffer.getContext('2d');
 
 		// get the ImageData object from the intermediary canvas. It is where the updated image will be drawn.
-		const imgData = ctxBuffer.getImageData( 0, 0, iLength, jLength );
-		const data = imgData.data;
-		// source image data from the volume
-		const volumeData = volume.data;
+		const imgData = ctxBuffer.createImageData(iLength, jLength);
+		const destData = imgData.data;
 
-		//filter values to apply to the image 
-		const upperThreshold = volume.upperThreshold;
-		const lowerThreshold = volume.lowerThreshold;
-		const windowLow = volume.windowLow;
-		const windowHigh = volume.windowHigh;
+		//final canvas where all filtered image will be drawn
+		const ctx = this.canvas.getContext('2d');
 
-		// manipulate some pixel elements
-		let pixelCount = 0;
+		//clear destination image 
+		ctx.globalCompositeOperation = 'source-over';
+		ctx.fillStyle = '#000';
+		ctx.fillRect(0, 0, iLength, jLength);
 
-		if ( volume.kind === 'label' ) {
-
-			//this part is currently useless but will be used when colortables will be handled
-			for ( let j = 0; j < jLength; j ++ ) {
-
-				for ( let i = 0; i < iLength; i ++ ) {
-
-					let label = volumeData[ sliceAccess( i, j ) ];
-					label = label >= this.colorMap.length ? ( label % this.colorMap.length ) + 1 : label;
-					const color = this.colorMap[ label ];
-					data[ 4 * pixelCount ] = ( color >> 24 ) & 0xff;
-					data[ 4 * pixelCount + 1 ] = ( color >> 16 ) & 0xff;
-					data[ 4 * pixelCount + 2 ] = ( color >> 8 ) & 0xff;
-					data[ 4 * pixelCount + 3 ] = color & 0xff;
-					pixelCount ++;
-
-				}
-
-			}
-
+		//composition of main volume image with overlay image(s)
+		let volMixRatio: number;
+		let overlayMixRatio: number;
+		if (volume.overlays.length > 0) {
+			volMixRatio = Math.max(Math.min(volume.mixRatio, 1), 0);
+			overlayMixRatio = (1 - volMixRatio) / volume.overlays.length;
 		} else {
+			volMixRatio = 1;
+			overlayMixRatio = 0;
+		}
+		//1rst layer is main volume
+		const layers = [{ layerVol: volume, pixelAccess: this.sliceAccess, mixRatio: volMixRatio }];
+		//one more layer for each overlay volumes 
+		volume.overlays.forEach((overlayVol: Volume) => {
+			const extracted = overlayVol.extractPerpendicularPlane(this.axis, this.index, this.matrix);
+			layers.push({ layerVol: overlayVol, pixelAccess: extracted.sliceAccess, mixRatio: overlayMixRatio });
+		});
 
-			for ( let j = 0; j < jLength; j ++ ) {
+		//combine images
+		layers.forEach(({ layerVol, pixelAccess, mixRatio }) => {
 
-				for ( let i = 0; i < iLength; i ++ ) {
+			const srcData = layerVol.data;
+			//filter values to apply to the image 
+			const windowLow = layerVol.windowLow;
+			const windowHigh = layerVol.windowHigh;
 
-					let value = volumeData[ sliceAccess( i, j ) ];
-					let alpha = 0xff;
-					//apply threshold
-					alpha = upperThreshold >= value ? ( lowerThreshold <= value ? alpha : 0 ) : 0;
-					//apply window level
-					value = Math.floor( 255 * ( value - windowLow ) / ( windowHigh - windowLow ) );
-					value = value > 255 ? 255 : ( value < 0 ? 0 : value | 0 );
+			let alpha = 0xff * mixRatio;
 
-					data[ 4 * pixelCount ] = value;
-					data[ 4 * pixelCount + 1 ] = value;
-					data[ 4 * pixelCount + 2 ] = value;
-					data[ 4 * pixelCount + 3 ] = alpha;
-					pixelCount ++;
+			// manipulate some pixel elements
+			let pixelCount = 0;
 
+			for (let j = 0; j < jLength; j++) {
+
+				for (let i = 0; i < iLength; i++) {
+
+					let value = srcData[pixelAccess(i, j)];
+					//apply window level and convert to 8bits value
+					value = Math.floor(255 * (value - windowLow) / (windowHigh - windowLow));
+					value = value > 255 ? 255 : (value < 0 ? 0 : value | 0);
+
+					destData[4 * pixelCount] = value;
+					destData[4 * pixelCount + 1] = value;
+					destData[4 * pixelCount + 2] = value;
+					destData[4 * pixelCount + 3] = alpha;
+					pixelCount++;
 				}
-
 			}
 
-		}
+			//update intermediary canvas with filtered image
+			ctxBuffer.putImageData(imgData, 0, 0);
 
-		//update intermediary canvas with filtered image
-		ctxBuffer.putImageData( imgData, 0, 0 );
+			//draw on final buffer (optionally setting blending method)
+			//ctx.globalCompositeOperation = 'screen';
+			ctx.globalCompositeOperation = 'screen';
+			ctx.drawImage(this.canvasBuffer, 0, 0, iLength, jLength, 0, 0, this.canvas.width, this.canvas.height);
 
-		const canvasBuffer = this.canvasBuffer;
-		//draw filtered image on the final canvas
-		const ctx = this.canvas.getContext( '2d' );
-		ctx.drawImage( canvasBuffer, 0, 0, iLength, jLength, 0, 0, this.canvas.width, this.canvas.height );
+			//restore default composition value
+			ctx.globalCompositeOperation = 'source-over';
+
+
+		});
 
 		this.mesh.material.map.needsUpdate = true;
 
@@ -196,7 +197,7 @@ VolumeSlice.prototype = {
 	 */
 	updateGeometry: function () {
 
-		const extracted = this.volume.extractPerpendicularPlane( this.axis, this.index );
+		const extracted = this.volume.extractPerpendicularPlane(this.axis, this.index);
 		this.sliceAccess = extracted.sliceAccess;
 		this.jLength = extracted.jLength;
 		this.iLength = extracted.iLength;
@@ -208,17 +209,17 @@ VolumeSlice.prototype = {
 		this.canvasBuffer.width = this.iLength;
 		this.canvasBuffer.height = this.jLength;
 
-		if ( this.geometry ) this.geometry.dispose(); // dispose existing geometry
+		if (this.geometry) this.geometry.dispose(); // dispose existing geometry
 
 		//plane holding the slice has dimensions in RAS space
-		this.geometry = new PlaneGeometry( extracted.planeWidth, extracted.planeHeight );
+		this.geometry = new PlaneGeometry(extracted.planeWidth, extracted.planeHeight);
 
-		if ( this.mesh ) {
+		if (this.mesh) {
 
 			this.mesh.geometry = this.geometry;
 			//reset mesh matrix
 			this.mesh.matrix.identity();
-			this.mesh.applyMatrix4( this.matrix );
+			this.mesh.applyMatrix4(this.matrix);
 
 		}
 
@@ -230,15 +231,15 @@ VolumeSlice.prototype = {
 	 * @member {Function} Dispose allocated geometries, textures, materials
 	 * @memberof VolumeSlice
 	 */
-	 dispose: function () {
+	dispose: function () {
 		//because Volume & VolumeSlice reference each other, the circular references loop needs to be broken...
 		this.volume = undefined;
-		if ( this.geometry ) this.geometry.dispose();
-		if ( this.mesh ) {
+		if (this.geometry) this.geometry.dispose();
+		if (this.mesh) {
 			//this.mesh.material.map().dispose();
 			this.mesh.material.dispose();
 		}
-	},	
+	},
 
 };
 

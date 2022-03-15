@@ -175,9 +175,9 @@ export class RegistrationTask {
             });
     };
 
-    downloadRegistered(onDownloaded: (filename:string, data: blob) => void) {
+    downloadRegistered(onDownloaded: (filename:string, data: Blob) => void) {
         return axios({
-              url: RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/results/registered',
+              url: this.getDownloadRegisteredtUrl(),
               method: 'GET',
               responseType: 'blob', 
             }).then((response) => {
@@ -190,6 +190,10 @@ export class RegistrationTask {
             .catch(function (error) {
                 console.log(error);
             });
+    };
+
+    getDownloadRegisteredtUrl() {
+        return RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/results/registered';
     };
 
     getDownloadResulstUrl() {

@@ -28,7 +28,7 @@ const ActionControls = (props: ActionControlsProps) => {
     const [showLogs, setShowLogs] = useAtom(StAtm.showLogs);
     const [, setLoglines] = useAtom(StAtm.loglines);
 
-    const [, setVolumeFile] = useAtom(StAtm.volumeFile);
+    const [overlayUrl, setOverlayUrl] = useAtom(StAtm.overlayUrl);
 
     return (
         <div
@@ -106,17 +106,7 @@ const ActionControls = (props: ActionControlsProps) => {
                     ?
                     <Button
                         icon="eye-open"
-                        disabled={!remoteTask || !remoteTask.hasFinished()}
-                        onClick={() => {
-                            remoteTask.downloadRegistered(
-                                (name, data) => {
-                                    setVolumeFile({
-                                        fileOrBlob: data,
-                                        name,
-                                    });
-                                }
-                            );
-                        }} >Preview</Button>
+                        onClick={() => setOverlayUrl(remoteTask.getDownloadRegisteredtUrl())} >Preview</Button>
                     :
                     null
                 }
@@ -144,12 +134,16 @@ const ActionControls = (props: ActionControlsProps) => {
                         null
                 }
             </div>
-            <Switch
-                checked={showLogs}
-                disabled={!remoteTask || !remoteTask.hasStarted()}
-                label="show logs"
-                onChange={() => setShowLogs(!showLogs)}
-            />
+            {remoteTask
+                ?
+                <Switch
+                    checked={showLogs}
+                    disabled={!remoteTask || !remoteTask.hasStarted()}
+                    label="show logs"
+                    onChange={() => setShowLogs(!showLogs)}
+                />
+                :
+                null}
         </div>
     );
 

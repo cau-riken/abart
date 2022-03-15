@@ -161,6 +161,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [isLoading, setIsLoading] = useAtom(StAtm.isLoading);
     const [volumeLoaded, setVolumeLoaded] = useAtom(StAtm.volumeLoaded);
     const [volumeFile,] = useAtom(StAtm.volumeFile);
+    const [overlayUrl, ] = useAtom(StAtm.overlayUrl);
 
     const [alertMessage, setAlertMessage] = useAtom(StAtm.alertMessage);
 
@@ -186,6 +187,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [showZSlice, setShowZSlice] = useAtom(StAtm.showZSlice);
 
     const [volumeRange, setVolumeRange] = useAtom(StAtm.volumeRange);
+    const [volumeMixRatio, setVolumeMixRatio] = useAtom(StAtm.volumeMixRatio);
     const [, setVolumeValMin] = useAtom(StAtm.volumeValMin);
     const [, setVolumeValMax] = useAtom(StAtm.volumeValMax);
 
@@ -550,6 +552,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
     }, [volumeRange]);
 
+    React.useEffect(() => {
+
+        if (volumeLoaded && obj3d.current.volume) {
+            obj3d.current.volume.mixRatio = volumeMixRatio;
+            obj3d.current.volume.repaintAllSlices();
+        }
+
+    }, [volumeMixRatio]);
+
 
     React.useEffect(() => {
 
@@ -748,6 +759,48 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
 
     }, [volumeFile]
+    );
+
+    React.useEffect(() => {
+        if (obj3d.current.volume && overlayUrl) {
+            setIsLoading(true);
+            const niftiloadr = new NIfTILoader();
+            niftiloadr.load(overlayUrl,
+                function onload(overlayVol) {
+                    if (overlayVol) {
+                        //FIXME check that overlay has same geometry as main volume
+                        //i.e. same nb of slices, same spacings (?)
+                        obj3d.current.volume.overlays.push(overlayVol);
+                        setVolumeMixRatio(0.5);
+                        obj3d.current.volume.repaintAllSlices();
+                    }
+                    setIsLoading(false);
+
+                },
+                function onProgress(request: ProgressEvent) {
+                    //console.log('onProgress', request)
+                },
+                function onError(e: ErrorEvent) {
+                    setIsLoading(false);
+                    console.error(e);
+                    setAlertMessage(
+                        <p>
+                            Couldn't load the result for preview.
+                            <br />
+                            {
+                                e.message
+                                    ?
+                                    <p>Reason:<pre>{e.message}</pre></p>
+                                    :
+                                    null
+                            }
+                        </p>);
+                },
+
+            );
+        }
+
+    }, [overlayUrl]
     );
 
     const adjustSliceCamOnResize = (

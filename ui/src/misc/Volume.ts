@@ -197,8 +197,16 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 	/**
 	 * @member {Array} RASDimensions This array holds the dimensions of the volume in the RAS space
 	 */
-
-}
+	this.RASDimensions = [];
+	/**
+	 * @member {Array} overlays This array holds optional overlay Volumes
+	 */
+	this.overlays = [];
+	/**
+	 * @member {number} mixRatio visibility ratio of the main Volume image when compositing with overlays' image(s)
+	 */	
+	this.mixRatio = 1;
+ }
 
 Volume.prototype = {
 
@@ -276,118 +284,163 @@ Volume.prototype = {
 	 * @member {Function} extractPerpendicularPlane Compute the orientation of the slice and returns all the information relative to the geometry such as sliceAccess, the plane matrix (orientation and position in RAS coordinate) and the dimensions of the plane in both coordinate system.
 	 * @memberof Volume
 	 * @param {string}            axis  the normal axis to the slice 'x' 'y' or 'z'
-	 * @param {number}            index the index of the slice
-	 * @returns {Object} an object containing all the usefull information on the geometry of the slice
+	 * @param {number}            index RAS index of the slice 
+	 * @returns {Object} an object containing all the useful information on the geometry of the slice
 	 */
-	extractPerpendicularPlane: function ( axis : string, sliceIndex :number ) {
+	extractPerpendicularPlane: function (axis: string, sliceRASIndex: number, overlayMatrix: THREE.Matrix4 | undefined) {
 
+		//Note: slice RAS indexes are always increasing from L to R, P to A, I to S.
+		//      (as opposed to IJK index which can increase in any direction depending on each NIfTI specifics)
+
+		let volume = this;
+
+		//volume IJK dimensions (number of slices)
+		const dimensions = new Vector3(this.xLength, this.yLength, this.zLength);
+
+		// slice image dimensions (in voxels)
 		let iLength,
 			jLength;
 
-		let	planeMatrix = new Matrix4();
+		//matrix applied to the geometry holding slice image to translate/rotate the slice at its correct location in RAS space
+		let planeMatrix = new Matrix4();
 
-		let	volume = this;
+		//plane dimension in RAS space (in mm)
 		let planeWidth,
-			planeHeight,
-			normalSpacing,
+			planeHeight;
+
+		//spacings of slices, along normal axis, and along i & j
+		let normalSpacing,
 			firstSpacing,
-			secondSpacing,
-			positionOffset;
+			secondSpacing;
 
-		let IJKIndex;
+		//position of the slice on its  axis (in RAS space)
+		let positionOffset;
 
-		//get index (in the volume single dimension data array) of the i,j voxel of this slice 
-		let ij2PixelAccess : (i: number, j : number) => number;
-			
+		//function that compute the index (in the volume single dimension data array) of the i,j voxel of this slice 
+		let ij2PixelAccess: (i: number, j: number) => number;
+
 		//with NRRD format, axes order is variable (unlike with NIfTI where it is always x, y, z), hence it need to be translated
 		const axisInIJK = new Vector3();
 
+		//normalized direction vector along i & j
 		const firstDirection = new Vector3(),
 			secondDirection = new Vector3();
 
-		//volume IJK dimensions
-		const dimensions = new Vector3( this.xLength, this.yLength, this.zLength );
+		const rotationMatrix = volume.matrix;
+		planeMatrix.extractRotation(rotationMatrix);
 
-		planeMatrix.extractRotation(volume.matrix);
+		//Note that overlay matrices might be different from the main volume one, 
+		//but overlay images are draw on same geometry of the main volume slice (which is transformed by main volume matrix)
+		//Hence slice indexes must be adjusted to restore proper image and cancel effect of the transform
+		const compMat = typeof overlayMatrix !== 'undefined'
+			?
+			new Matrix4().extractRotation(overlayMatrix).multiply(planeMatrix)
+			:
+			new Matrix4()
+			;
 
-		switch ( axis ) {
 
-			case 'x' :
-				axisInIJK.set( 1, 0, 0 );
-				firstDirection.set( 0, 0, - 1 );
-				secondDirection.set( 0, - 1, 0 );
-				firstSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
-				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'y' ) ];
-				ij2PixelAccess = (i, j) =>  volume.access( sliceIndex, (volume.yLength - 1 - j),  (volume.zLength - 1 - i) );
+		//indicator set to true when ijk axis is reverse compared to RAS axis
+		let reverseX: boolean, reverseY: boolean, reverseZ: boolean;
+
+		switch (axis) {
+
+			case 'x':
+				//axisInIJK.set( 1, 0, 0 );
+				//notice reversed direction for i & j 
+				firstDirection.set(0, 0, - 1);
+				secondDirection.set(0, - 1, 0);
+				firstSpacing = this.spacing[this.axisOrder.indexOf('z')];
+				secondSpacing = this.spacing[this.axisOrder.indexOf('y')];
+
+				[reverseX, reverseY, reverseZ] = new Vector3(1, -1, -1).applyMatrix4(compMat).toArray().map(c => c < 0);
+				ij2PixelAccess = (i, j) => volume.access(
+					reverseX ? (volume.xLength - 1 - sliceRASIndex) : sliceRASIndex,
+					reverseY ? (volume.yLength - 1 - j) : j,
+					reverseZ ? (volume.zLength - 1 - i) : i
+				);
 
 				//rotate so the plane is orthogonal to X Axis
-				planeMatrix.multiply( ( new Matrix4() ).makeRotationY( Math.PI / 2 ) );
+				planeMatrix.multiply((new Matrix4()).makeRotationY(Math.PI / 2));
 
-				normalSpacing = this.spacing[ this.axisOrder.indexOf( 'x' ) ];
+				normalSpacing = this.spacing[this.axisOrder.indexOf('x')];
 				//middle slice will be located at the origin 
-				positionOffset = (volume.RASDimensions[ 0 ] - normalSpacing) / 2;
-				planeMatrix.setPosition( new Vector3( sliceIndex * normalSpacing - positionOffset, 0, 0 ) );
+				positionOffset = (volume.RASDimensions[0] - normalSpacing) / 2;
+				planeMatrix.setPosition(new Vector3(sliceRASIndex * normalSpacing - positionOffset, 0, 0));
 				break;
-			case 'y' :
-				axisInIJK.set( 0, 1, 0 );
-				firstDirection.set( 1, 0, 0 );
-				secondDirection.set( 0, 0, 1 );
-				firstSpacing = this.spacing[ this.axisOrder.indexOf( 'x' ) ];
-				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
-				
-				const reverseIndex = 0 >= axisInIJK.applyMatrix4(volume.matrix).getComponent(1);
-				ij2PixelAccess = (reverseIndex) 
-					?
-						(i, j) =>  volume.access( i, (volume.yLength - 1 - sliceIndex), j )
-					:
-				 		(i, j) =>  volume.access( i, sliceIndex, j );
+
+			case 'y':
+				axisInIJK.set(0, 1, 0);
+				firstDirection.set(1, 0, 0);
+				secondDirection.set(0, 0, 1);
+				firstSpacing = this.spacing[this.axisOrder.indexOf('x')];
+				secondSpacing = this.spacing[this.axisOrder.indexOf('z')];
+
+				reverseY = 0 >= new Vector3(1, 1, 1).applyMatrix4(rotationMatrix).getComponent(1);
+				ij2PixelAccess = (i, j) => volume.access(
+					i,
+					reverseY ? (volume.yLength - 1 - sliceRASIndex) : sliceRASIndex,
+					j
+				);
 
 				//rotate so the plane is orthogonal to Y Axis
-				planeMatrix.multiply( ( new Matrix4() ).makeRotationX( - Math.PI / 2 ) );
+				planeMatrix.multiply((new Matrix4()).makeRotationX(- Math.PI / 2));
 
-				normalSpacing = this.spacing[ this.axisOrder.indexOf( 'y' ) ];
+				normalSpacing = this.spacing[this.axisOrder.indexOf('y')];
 				//middle slice will be located at the origin 
-				positionOffset = ( volume.RASDimensions[ 1 ] - normalSpacing)  / 2;
-				planeMatrix.setPosition( new Vector3(0,  sliceIndex * normalSpacing - positionOffset, 0 ) );
+				positionOffset = (volume.RASDimensions[1] - normalSpacing) / 2;
+				planeMatrix.setPosition(new Vector3(0, sliceRASIndex * normalSpacing - positionOffset, 0));
 				break;
-			case 'z' :
-			default :
-				axisInIJK.set( 0, 0, 1 );
-				firstDirection.set( 1, 0, 0 );
-				secondDirection.set( 0, - 1, 0 );
-				firstSpacing = this.spacing[ this.axisOrder.indexOf( 'x' ) ];
-				secondSpacing = this.spacing[ this.axisOrder.indexOf( 'y' ) ];
-				ij2PixelAccess = (i, j) =>  volume.access( i, (volume.yLength - 1 - j), sliceIndex );
 
-				//newly created plane is already orthogonal to Z Axis
+			case 'z':
+			default:
+				//axisInIJK.set( 0, 0, 1 );
+				firstDirection.set(1, 0, 0);
+				//notice reversed direction for j 
+				secondDirection.set(0, - 1, 0);
+				firstSpacing = this.spacing[this.axisOrder.indexOf('x')];
+				secondSpacing = this.spacing[this.axisOrder.indexOf('y')];
 
-				normalSpacing = this.spacing[ this.axisOrder.indexOf( 'z' ) ];
+				[reverseX, reverseY, reverseZ] = new Vector3(1, -1, 1).applyMatrix4(compMat).toArray().map(c => c < 0);
+				ij2PixelAccess = (i, j) => volume.access(
+					reverseX ? (volume.xLength - 1 - i) : i,
+					reverseY ? (volume.yLength - 1 - j) : j,
+					reverseZ ? (volume.zLength - 1 - sliceRASIndex) : sliceRASIndex
+				);
+
+				//Note: by default, newly created plane is already orthogonal to Z Axis
+
+				normalSpacing = this.spacing[this.axisOrder.indexOf('z')];
 				//middle slice will be located at the origin 
-				positionOffset =  (volume.RASDimensions[ 2 ] - normalSpacing)  / 2;
-				planeMatrix.setPosition( new Vector3( 0, 0, sliceIndex * normalSpacing - positionOffset ) );
+				positionOffset = (volume.RASDimensions[2] - normalSpacing) / 2;
+				//
+				planeMatrix.setPosition(new Vector3(0, 0, sliceRASIndex * normalSpacing - positionOffset));
 
 				break;
 
 		}
 
-		firstDirection.applyMatrix4( volume.inverseMatrix ).normalize();
-		secondDirection.applyMatrix4( volume.inverseMatrix ).normalize();
-		iLength = Math.floor( Math.abs( firstDirection.dot( dimensions ) ) );
-		jLength = Math.floor( Math.abs( secondDirection.dot( dimensions ) ) );
+		firstDirection.applyMatrix4(volume.inverseMatrix).normalize();
+		secondDirection.applyMatrix4(volume.inverseMatrix).normalize();
+		iLength = Math.floor(Math.abs(firstDirection.dot(dimensions)));
+		jLength = Math.floor(Math.abs(secondDirection.dot(dimensions)));
+
 		//plane dimension in RAS space
-		planeWidth = Math.abs( iLength * firstSpacing );
-		planeHeight = Math.abs( jLength * secondSpacing );
+		planeWidth = Math.abs(iLength * firstSpacing);
+		planeHeight = Math.abs(jLength * secondSpacing);
 
 		return {
-			//slice of the canvas to draw slice image (image dimension in voxels)
+			// slice of the canvas to draw slice image
 			iLength: iLength,
 			jLength: jLength,
 
+			// function to retrieve the absolute index of a voxel from its i,j coords in this slice 
 			sliceAccess: ij2PixelAccess,
 
-			//matrix applied to the geometry to translate the slice in RAS space
+			// matrix to apply to the geometry holding slice image to locate it correctly in RAS space 
 			matrix: planeMatrix,
-			//size of the plane geometry holding the slice (size in RAS space)
+
+			// size of the plane geometry holding the slice (size in RAS space)
 			planeWidth: planeWidth,
 			planeHeight: planeHeight
 		};

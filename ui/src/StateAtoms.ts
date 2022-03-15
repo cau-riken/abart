@@ -57,6 +57,7 @@ export enum CameraPOV {
 }
 
 export const volumeFile = atom<LoadedVolumeFile | undefined>(undefined);
+export const overlayUrl = atom<string | undefined>(undefined);
 
 export const isLoading = atom(false);
 export const volumeLoaded = atom(false);

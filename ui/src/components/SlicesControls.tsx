@@ -22,6 +22,7 @@ type SlicesControlsProps = {
 const SlicesControls = (props: SlicesControlsProps) => {
 
     const [volumeLoaded,] = useAtom(StAtm.volumeLoaded);
+    const [overlayUrl,] = useAtom(StAtm.overlayUrl);
 
     const setCameraPOV = useSetAtom(StAtm.cameraPOV);
 
@@ -37,6 +38,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
     const [volumeValMax,] = useAtom(StAtm.volumeValMax);
 
     const [volumeRange, setVolumeRange] = useAtom(StAtm.volumeRange);
+    const [volumeMixRatio, setVolumeMixRatio] = useAtom(StAtm.volumeMixRatio);
 
     const [indexX, setIndexX] = useAtom(StAtm.indexX);
     const [indexY, setIndexY] = useAtom(StAtm.indexY);
@@ -272,6 +274,37 @@ const SlicesControls = (props: SlicesControlsProps) => {
                     value={volumeRange}
                 />
             </div>
+            {
+                overlayUrl ?
+                    <div
+                        style={{
+                            marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,
+                            display: 'grid',
+                            gridTemplateColumns: '30px 1fr',
+                        }}
+                        title={"mix source volume and result preview"}
+                    >
+                        <Icon
+                            style={
+                                (!volumeLoaded ? { color: 'rgba(92, 112, 128, 0.2)' } : {})
+                            }
+                            icon="segmented-control"
+                        />
+                        <Slider
+                            disabled={!volumeLoaded}
+                            min={0}
+                            max={1}
+                            stepSize={1 / 255}
+                            labelValues={[]}
+                            labelPrecision={2}
+                            showTrackFill={false}
+                            onChange={setVolumeMixRatio}
+                            value={volumeMixRatio}
+                        />
+                    </div>
+                    :
+                    null
+            }
         </>
     );
 
