@@ -25,23 +25,23 @@ const HelpNavigation = () => {
 
     const helpItems: JSX.Element[] = [];
 
-    const addHelpItems = (item: string | JSX.Element) => {
+    const addHelpItems = (key: number, item: string | JSX.Element) => {
         helpItems.push(
-            <div style={{ textAlign: 'center' }}>{item}</div>
+            <div key={key} style={{ textAlign: 'center' }}>{item}</div>
         );
     }
-    addHelpItems('Use mouse wheel to zoom in and out.');
+    addHelpItems(1, 'Use mouse wheel to zoom in and out.');
 
     if (StAtm.ViewMode.Volume3D === viewMode || StAtm.ViewMode.Slice3D === viewMode) {
-        addHelpItems('Click & drag to rotate the volume');
+        addHelpItems(2, 'Click & drag to rotate the volume');
     }
     if (StAtm.ViewMode.Slice3D === viewMode || StAtm.ViewMode.Slice2D === viewMode) {
-        addHelpItems('[Alt]+click to change orthogonal slices');
-        addHelpItems('[Shift]+click to mark the position of a landmark (after selecting landmark in top list)');
+        addHelpItems(3, '[Alt]+click to change orthogonal slices');
+        addHelpItems(4, '[Shift]+click to mark the position of a landmark (after selecting landmark in top list)');
     }
     if (StAtm.ViewMode.Slice2D === viewMode) {
-        addHelpItems('[Ctrl]+click & drag image to pan');
-        addHelpItems('Click & drag a landmark to change its location');
+        addHelpItems(5, '[Ctrl]+click & drag image to pan');
+        addHelpItems(6, 'Click & drag a landmark to change its location');
     }
 
 
