@@ -1416,20 +1416,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     brainModel.add(brainShell);
 
 
-                    //scale brainModel to roughly fit image dimension 
-                    const sf = 0.8;
-                    var templBbox = new THREE.Box3().setFromObject(brainModel);
-
-                    const [brainboxXLen, brainboxYLen, brainboxZLen] = templBbox.max.toArray();
-                    const scaleTemplMatrix = new THREE.Matrix4().set(
-                        sf * mboxXLen / brainboxXLen, 0, 0, 0,
-                        0, sf * mboxYLen / brainboxYLen, 0, 0,
-                        0, 0, sf * mboxZLen / brainboxZLen, 0,
-                        0, 0, 0, 1
-                    );
-
-                    brainModel.applyMatrix4(scaleTemplMatrix);
-
                     brainModel.visible = initVisibility;
 
                     scene.add(brainModel);
