@@ -20,7 +20,7 @@ export function setupAxesHelper(axisLength: number, scene: THREE.Scene) {
     scene.add(axes);
 
     //create sprites for axes labels
-    StAtm.Axes.forEach((info, pov)=> {
+    StAtm.Axes.forEach((info, pov) => {
         const sprite = createTextSprite(info.label);
         if (sprite) {
             sprite.position.copy(info.dir.clone().multiplyScalar(axisLength));
@@ -66,30 +66,28 @@ export function createTextSprite(message: string): THREE.Sprite | null {
 
 }
 
-//shader material from http://stemkoski.github.io/Three.js/Shader-Glow.html
-export const newXRayGlowingMaterial = (color: THREE.Color, viewVector: THREE.Vector3) =>
+//shader material derived from http://stemkoski.github.io/Three.js/Shader-Glow.html
+export const newXRayGlowingMaterial = (color: THREE.Color) =>
     new THREE.ShaderMaterial(
         {
             uniforms: {
                 c: { value: 1.0 },
                 p: { value: 1.7 },
                 glowColor: { value: color },
-                viewVector: { value: viewVector }
             },
             vertexShader: `
-uniform vec3 viewVector;
 uniform float c;
 uniform float p;
 varying float intensity;
 void main() 
 {
     vec3 vNormal = normalize( normalMatrix * normal );
-    vec3 vNormel = normalize( normalMatrix * viewVector );
+    vec3 vNormel = vec3( 0.0, 0.0, 1.0 );
     intensity = pow( c - dot(vNormal, vNormel), p );
     
     gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
 }
-                `,
+`,
             fragmentShader: `
 uniform vec3 glowColor;
 varying float intensity;
@@ -98,7 +96,7 @@ void main()
     vec3 glow = glowColor * intensity;
     gl_FragColor = vec4( glow, 1.0 );
 }
-                `,
+`,
             side: THREE.FrontSide,
             blending: THREE.AdditiveBlending,
             transparent: true,

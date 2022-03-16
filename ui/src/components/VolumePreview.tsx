@@ -99,7 +99,6 @@ export type Obj3dRefs = {
     brainModel?: THREE.Group | undefined,
     //materials for brain model
     brModelPlainMats?: THREE.Material[] | undefined,
-    brModelXRayMat?: THREE.ShaderMaterial | undefined,
 
     //groups for user created landmarks
     marksGroup?: THREE.Group | undefined,
@@ -1378,9 +1377,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
         });
         obj3d.current.brModelPlainMats = clippedMats;
 
-        const xrayMat = newXRayGlowingMaterial(brainModelXRayColor, cameraPos);
+        const xrayMat = newXRayGlowingMaterial(brainModelXRayColor);
         obj3d.current.disposable.push(xrayMat);
-        obj3d.current.brModelXRayMat = xrayMat;
 
         plyloader.load(
             'models/bma_sp2.lh.surf_20kf.ply',
@@ -1520,12 +1518,6 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 setDeltaRotation(
                     obj3d.current.brainModel.rotation.toArray() as [number, number, number]
                 );
-            }
-
-            //update view vector for brain model's XRay material
-            if (!rtState.current.fixedBrainModel && obj3d.current.brModelXRayMat) {
-                const subV = new THREE.Vector3().subVectors(obj3d.current.camera.position, obj3d.current.brainModel.position);
-                obj3d.current.brModelXRayMat.uniforms.viewVector.value = subV;
             }
 
         }
