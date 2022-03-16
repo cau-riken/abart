@@ -708,13 +708,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
     }, [brainModelRelativeRot]);
 
     React.useEffect(() => {
-        updateBrainModelRotation(true);
-        renderAll();
-    }, [brainModelInitRotation]);
-
-    React.useEffect(() => {
-
         rtState.current.brainModelInitRotation = brainModelInitRotation;
+
+        //check if brain model orientation was reset
+        const identQ = new THREE.Quaternion();
+        if (obj3d.current.camera && rtState.current.stopQ && identQ.equals(brainModelInitRotation)) {
+            obj3d.current.camera.getWorldQuaternion(rtState.current.stopQ);
+        }
+
+        updateBrainModelRotation(true);
         renderAll();
 
     }, [brainModelInitRotation]);
@@ -1535,8 +1537,8 @@ const VolumePreview = (props: VolumePreviewProps) => {
             }
 
             //update view vector for brain model's XRay material
-            if (obj3d.current.brModelXRayMat && obj3d.current.camera && obj3d.current.brainModel) {
-                const subV = new THREE.Vector3().subVectors(obj3d.current.camera?.position, obj3d.current.brainModel?.position)
+            if (!rtState.current.fixedBrainModel && obj3d.current.brModelXRayMat) {
+                const subV = new THREE.Vector3().subVectors(obj3d.current.camera.position, obj3d.current.brainModel.position);
                 obj3d.current.brModelXRayMat.uniforms.viewVector.value = subV;
             }
 
