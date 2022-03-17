@@ -7,6 +7,33 @@ import {
 } from 'three';
 import { VolumeSlice } from './VolumeSlice';
 
+export type IndexedColorEntry = {
+	index: number,
+	abbrev: string,
+	hemisph: string,
+	color: [number, number, number, number]
+};
+
+export const parseColorLUT = (text: string) => {
+	const re = /([0-9]+)\s+([R|L]H):_.*_\(([^)]*)\)\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([0-9]+).*/;
+
+	let maxIndex = 0;
+	const entries =		text
+			.split('\n')
+			.map(l => re.exec(l))
+			.filter(parts => parts != null)
+			.map(parts => {
+				const [, colorNum, hemisph, abbrev, r, g, b, a] = parts;
+				const index = parseInt(colorNum);
+				maxIndex = Math.max(maxIndex, index);
+				return { index, abbrev, hemisph, color: [parseInt(r), parseInt(g), parseInt(b), parseInt(a)] } as IndexedColorEntry;				
+			});
+	const lut = new Array<IndexedColorEntry>(maxIndex+1);
+	entries.forEach( e => lut[e.index] = e);
+	return lut;
+};
+
+
 /**
  * This class had been written to handle the output of the NRRD loader.
  * It contains a volume of data and informations about it.
@@ -19,108 +46,108 @@ import { VolumeSlice } from './VolumeSlice';
  * @param   {string}        type            The type of data (uint8, uint16, ...)
  * @param   {ArrayBuffer}   arrayBuffer     The buffer with volume data
  */
-function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
+function Volume(xLength, yLength, zLength, type, arrayBuffer) {
 
-	if ( arguments.length > 0 ) {
+	if (arguments.length > 0) {
 
 		/**
 		 * @member {number} xLength Width of the volume in the IJK coordinate system
 		 */
-		this.xLength = Number( xLength ) || 1;
+		this.xLength = Number(xLength) || 1;
 		/**
 		 * @member {number} yLength Height of the volume in the IJK coordinate system
 		 */
-		this.yLength = Number( yLength ) || 1;
+		this.yLength = Number(yLength) || 1;
 		/**
 		 * @member {number} zLength Depth of the volume in the IJK coordinate system
 		 */
-		this.zLength = Number( zLength ) || 1;
+		this.zLength = Number(zLength) || 1;
 		/**
 		 * @member {Array<string>} The order of the Axis dictated by the NRRD header
 		 */
-		this.axisOrder = [ 'x', 'y', 'z' ];
+		this.axisOrder = ['x', 'y', 'z'];
 		/**
 		 * @member {TypedArray} data Data of the volume
 		 */
 
-		switch ( type ) {
+		switch (type) {
 
-			case 'Uint8' :
-			case 'uint8' :
-			case 'uchar' :
-			case 'unsigned char' :
-			case 'uint8_t' :
-				this.data = new Uint8Array( arrayBuffer );
+			case 'Uint8':
+			case 'uint8':
+			case 'uchar':
+			case 'unsigned char':
+			case 'uint8_t':
+				this.data = new Uint8Array(arrayBuffer);
 				break;
-			case 'Int8' :
-			case 'int8' :
-			case 'signed char' :
-			case 'int8_t' :
-				this.data = new Int8Array( arrayBuffer );
+			case 'Int8':
+			case 'int8':
+			case 'signed char':
+			case 'int8_t':
+				this.data = new Int8Array(arrayBuffer);
 				break;
-			case 'Int16' :
-			case 'int16' :
-			case 'short' :
-			case 'short int' :
-			case 'signed short' :
-			case 'signed short int' :
-			case 'int16_t' :
-				this.data = new Int16Array( arrayBuffer );
+			case 'Int16':
+			case 'int16':
+			case 'short':
+			case 'short int':
+			case 'signed short':
+			case 'signed short int':
+			case 'int16_t':
+				this.data = new Int16Array(arrayBuffer);
 				break;
-			case 'Uint16' :
-			case 'uint16' :
-			case 'ushort' :
-			case 'unsigned short' :
-			case 'unsigned short int' :
-			case 'uint16_t' :
-				this.data = new Uint16Array( arrayBuffer );
+			case 'Uint16':
+			case 'uint16':
+			case 'ushort':
+			case 'unsigned short':
+			case 'unsigned short int':
+			case 'uint16_t':
+				this.data = new Uint16Array(arrayBuffer);
 				break;
-			case 'Int32' :
-			case 'int32' :
-			case 'int' :
-			case 'signed int' :
-			case 'int32_t' :
-				this.data = new Int32Array( arrayBuffer );
+			case 'Int32':
+			case 'int32':
+			case 'int':
+			case 'signed int':
+			case 'int32_t':
+				this.data = new Int32Array(arrayBuffer);
 				break;
-			case 'Uint32' :
-			case 'uint32' :
-			case 'uint' :
-			case 'unsigned int' :
-			case 'uint32_t' :
-				this.data = new Uint32Array( arrayBuffer );
+			case 'Uint32':
+			case 'uint32':
+			case 'uint':
+			case 'unsigned int':
+			case 'uint32_t':
+				this.data = new Uint32Array(arrayBuffer);
 				break;
-			case 'longlong' :
-			case 'long long' :
-			case 'long long int' :
-			case 'signed long long' :
-			case 'signed long long int' :
-			case 'int64' :
-			case 'int64_t' :
-			case 'ulonglong' :
-			case 'unsigned long long' :
-			case 'unsigned long long int' :
-			case 'uint64' :
-			case 'uint64_t' :
-				throw new Error( 'Error in Volume constructor : this type is not supported in JavaScript' );
+			case 'longlong':
+			case 'long long':
+			case 'long long int':
+			case 'signed long long':
+			case 'signed long long int':
+			case 'int64':
+			case 'int64_t':
+			case 'ulonglong':
+			case 'unsigned long long':
+			case 'unsigned long long int':
+			case 'uint64':
+			case 'uint64_t':
+				throw new Error('Error in Volume constructor : this type is not supported in JavaScript');
 				break;
-			case 'Float32' :
-			case 'float32' :
-			case 'float' :
-				this.data = new Float32Array( arrayBuffer );
+			case 'Float32':
+			case 'float32':
+			case 'float':
+				this.data = new Float32Array(arrayBuffer);
 				break;
-			case 'Float64' :
-			case 'float64' :
-			case 'double' :
-				this.data = new Float64Array( arrayBuffer );
+			case 'Float64':
+			case 'float64':
+			case 'double':
+				this.data = new Float64Array(arrayBuffer);
 				break;
-			default :
-				this.data = new Uint8Array( arrayBuffer );
+			default:
+				this.data = new Uint8Array(arrayBuffer);
 
 		}
 
-		if ( this.data.length !== this.xLength * this.yLength * this.zLength ) {
+		if (this.data.length !== this.xLength * this.yLength * this.zLength) {
 
-			throw new Error( 'Error in Volume constructor, lengths are not matching arrayBuffer size' );
+			throw new Error('Error in Volume constructor, lengths are not matching arrayBuffer size');
 
 		}
 
@@ -129,11 +156,11 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 	/**
 	 * @member {Array}  spacing Spacing to apply to the volume from IJK to RAS coordinate system
 	 */
-	this.spacing = [ 1, 1, 1 ];
+	this.spacing = [1, 1, 1];
 	/**
 	 * @member {Array}  offset Offset of the volume in the RAS coordinate system
 	 */
-	this.offset = [ 0, 0, 0 ];
+	this.offset = [0, 0, 0];
 	/**
 	 * @member {Martrix3} matrix The IJK to RAS matrix
 	 */
@@ -147,45 +174,45 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 	 *                      If changed, geometryNeedsUpdate is automatically set to true on all the slices associated to this volume
 	 */
 	let lowerThreshold = - Infinity;
-	Object.defineProperty( this, 'lowerThreshold', {
+	Object.defineProperty(this, 'lowerThreshold', {
 		get: function () {
 
 			return lowerThreshold;
 
 		},
-		set: function ( value ) {
+		set: function (value) {
 
 			lowerThreshold = value;
-			this.sliceList.forEach( function ( slice ) {
+			this.sliceList.forEach(function (slice) {
 
 				slice.geometryNeedsUpdate = true;
 
-			} );
+			});
 
 		}
-	} );
+	});
 	/**
 	 * @member {number} upperThreshold The voxels with values over this threshold won't appear in the slices.
 	 *                      If changed, geometryNeedsUpdate is automatically set to true on all the slices associated to this volume
 	 */
 	let upperThreshold = Infinity;
-	Object.defineProperty( this, 'upperThreshold', {
+	Object.defineProperty(this, 'upperThreshold', {
 		get: function () {
 
 			return upperThreshold;
 
 		},
-		set: function ( value ) {
+		set: function (value) {
 
 			upperThreshold = value;
-			this.sliceList.forEach( function ( slice ) {
+			this.sliceList.forEach(function (slice) {
 
 				slice.geometryNeedsUpdate = true;
 
-			} );
+			});
 
 		}
-	} );
+	});
 
 
 	/**
@@ -204,9 +231,14 @@ function Volume( xLength, yLength, zLength, type, arrayBuffer ) {
 	this.overlays = [];
 	/**
 	 * @member {number} mixRatio visibility ratio of the main Volume image when compositing with overlays' image(s)
-	 */	
+	 */
 	this.mixRatio = 1;
- }
+
+	/**
+	 * @member {IndexedColorEntry[]} colorTable optional color lookup table if volume contains indexed colors images.
+	 */
+	this.colorTable = undefined;
+}
 
 Volume.prototype = {
 
@@ -220,9 +252,9 @@ Volume.prototype = {
 	 * @param {number} k    Third coordinate
 	 * @returns {number}  value in the data array
 	 */
-	getData: function ( i, j, k ) {
+	getData: function (i, j, k) {
 
-		return this.data[ k * this.xLength * this.yLength + j * this.xLength + i ];
+		return this.data[k * this.xLength * this.yLength + j * this.xLength + i];
 
 	},
 
@@ -234,7 +266,7 @@ Volume.prototype = {
 	 * @param {number} k    Third coordinate
 	 * @returns {number}  index
 	 */
-	access: function ( i, j, k ) {
+	access: function (i, j, k) {
 
 		return k * this.xLength * this.yLength + j * this.xLength + i;
 
@@ -246,12 +278,12 @@ Volume.prototype = {
 	 * @param {number} index index of the voxel
 	 * @returns {Array}  [x,y,z]
 	 */
-	reverseAccess: function ( index ) {
+	reverseAccess: function (index) {
 
-		const z = Math.floor( index / ( this.yLength * this.xLength ) );
-		const y = Math.floor( ( index - z * this.yLength * this.xLength ) / this.xLength );
+		const z = Math.floor(index / (this.yLength * this.xLength));
+		const y = Math.floor((index - z * this.yLength * this.xLength) / this.xLength);
 		const x = index - z * this.yLength * this.xLength - y * this.xLength;
-		return [ x, y, z ];
+		return [x, y, z];
 
 	},
 
@@ -265,14 +297,14 @@ Volume.prototype = {
 	 * @param {Object}   context    You can specify a context in which call the function, default if this Volume
 	 * @returns {Volume}   this
 	 */
-	map: function ( functionToMap, context ) {
+	map: function (functionToMap, context) {
 
 		const length = this.data.length;
 		context = context || this;
 
-		for ( let i = 0; i < length; i ++ ) {
+		for (let i = 0; i < length; i++) {
 
-			this.data[ i ] = functionToMap.call( context, this.data[ i ], i, this.data );
+			this.data[i] = functionToMap.call(context, this.data[i], i, this.data);
 
 		}
 
@@ -456,10 +488,10 @@ Volume.prototype = {
 	 * @param {number}            index the index of the slice
 	 * @returns {VolumeSlice} the extracted slice
 	 */
-	extractSlice: function ( axis, index ) {
+	extractSlice: function (axis, index) {
 
-		const slice = new VolumeSlice( this, index, axis );
-		this.sliceList.push( slice );
+		const slice = new VolumeSlice(this, index, axis);
+		this.sliceList.push(slice);
 		return slice;
 
 	},
@@ -472,11 +504,11 @@ Volume.prototype = {
 	 */
 	repaintAllSlices: function () {
 
-		this.sliceList.forEach( function ( slice ) {
+		this.sliceList.forEach(function (slice) {
 
 			slice.repaint();
 
-		} );
+		});
 
 		return this;
 
@@ -497,13 +529,13 @@ Volume.prototype = {
 
 		let i = 0;
 
-		for ( i = 0; i < datasize; i ++ ) {
+		for (i = 0; i < datasize; i++) {
 
-			if ( ! isNaN( this.data[ i ] ) ) {
+			if (!isNaN(this.data[i])) {
 
-				const value = this.data[ i ];
-				min = Math.min( min, value );
-				max = Math.max( max, value );
+				const value = this.data[i];
+				min = Math.min(min, value);
+				max = Math.max(max, value);
 
 			}
 
@@ -512,7 +544,7 @@ Volume.prototype = {
 		this.min = min;
 		this.max = max;
 
-		return [ min, max ];
+		return [min, max];
 
 	}
 

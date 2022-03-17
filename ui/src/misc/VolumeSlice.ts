@@ -146,6 +146,7 @@ VolumeSlice.prototype = {
 		layers.forEach(({ layerVol, pixelAccess, mixRatio }) => {
 
 			const srcData = layerVol.data;
+			const colorTable = layerVol.colorTable;
 			//filter values to apply to the image 
 			const windowLow = layerVol.windowLow;
 			const windowHigh = layerVol.windowHigh;
@@ -160,13 +161,27 @@ VolumeSlice.prototype = {
 				for (let i = 0; i < iLength; i++) {
 
 					let value = srcData[pixelAccess(i, j)];
-					//apply window level and convert to 8bits value
-					value = Math.floor(255 * (value - windowLow) / (windowHigh - windowLow));
-					value = value > 255 ? 255 : (value < 0 ? 0 : value | 0);
+					let r, g, b;
 
-					destData[4 * pixelCount] = value;
-					destData[4 * pixelCount + 1] = value;
-					destData[4 * pixelCount + 2] = value;
+					if (colorTable) {
+						//if a color table is supplied, voxel value is the index at which the color defined in the lut
+						const colorIndex = parseInt(value);
+						const color = colorTable[colorIndex];
+						if (color) {
+							[r, g, b,] = color.color;
+						} else {
+							r = g = b = 0;
+						}
+					} else {
+						//apply window level and convert to 8bits value
+						value = Math.floor(255 * (value - windowLow) / (windowHigh - windowLow));
+						value = value > 255 ? 255 : (value < 0 ? 0 : value | 0);
+						r = g = b = value;
+					}
+
+					destData[4 * pixelCount] = r;
+					destData[4 * pixelCount + 1] = g;
+					destData[4 * pixelCount + 2] = b;
 					destData[4 * pixelCount + 3] = alpha;
 					pixelCount++;
 				}
