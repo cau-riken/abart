@@ -138,7 +138,7 @@ VolumeSlice.prototype = {
 		const layers = [{ layerVol: volume, pixelAccess: this.sliceAccess, mixRatio: volMixRatio }];
 		//one more layer for each overlay volumes 
 		volume.overlays.forEach((overlayVol: Volume) => {
-			const extracted = overlayVol.extractPerpendicularPlane(this.axis, this.index, this.matrix);
+			const extracted = overlayVol.extractPerpendicularPlane(this.axis, this.index, volume.matrix);
 			layers.push({ layerVol: overlayVol, pixelAccess: extracted.sliceAccess, mixRatio: overlayMixRatio });
 		});
 

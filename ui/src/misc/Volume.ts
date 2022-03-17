@@ -284,10 +284,11 @@ Volume.prototype = {
 	 * @member {Function} extractPerpendicularPlane Compute the orientation of the slice and returns all the information relative to the geometry such as sliceAccess, the plane matrix (orientation and position in RAS coordinate) and the dimensions of the plane in both coordinate system.
 	 * @memberof Volume
 	 * @param {string}            axis  the normal axis to the slice 'x' 'y' or 'z'
-	 * @param {number}            index RAS index of the slice 
+	 * @param {number}            sliceRASIndex RAS index of the slice 
+	 * @param {Matrix4}            mainVolMatrix matrix of the main volume this volume is overlayed on (undefined if this volume is not an overlay).
 	 * @returns {Object} an object containing all the useful information on the geometry of the slice
 	 */
-	extractPerpendicularPlane: function (axis: string, sliceRASIndex: number, overlayMatrix: THREE.Matrix4 | undefined) {
+	extractPerpendicularPlane: function (axis: string, sliceRASIndex: number, mainVolMatrix: THREE.Matrix4 | undefined) {
 
 		//Note: slice RAS indexes are always increasing from L to R, P to A, I to S.
 		//      (as opposed to IJK index which can increase in any direction depending on each NIfTI specifics)
@@ -329,12 +330,12 @@ Volume.prototype = {
 		const rotationMatrix = volume.matrix;
 		planeMatrix.extractRotation(rotationMatrix);
 
-		//Note that overlay matrices might be different from the main volume one, 
+		//Note that matrix of overlay volume might be different from the main volume one, 
 		//but overlay images are draw on same geometry of the main volume slice (which is transformed by main volume matrix)
 		//Hence slice indexes must be adjusted to restore proper image and cancel effect of the transform
-		const compMat = typeof overlayMatrix !== 'undefined'
+		const compMat = typeof mainVolMatrix !== 'undefined'
 			?
-			new Matrix4().extractRotation(overlayMatrix).multiply(planeMatrix)
+			new Matrix4().extractRotation(mainVolMatrix).invert().multiply(planeMatrix)
 			:
 			new Matrix4()
 			;
