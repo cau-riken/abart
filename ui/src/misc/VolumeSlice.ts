@@ -10,77 +10,98 @@ import {
 	Texture
 } from 'three';
 
+import { AxisIndex, Volume } from './Volume';
+
+
 /**
- * This class has been made to hold a slice of a volume data
+ * slice of a volume data
  * @class
  * @param   {Volume} volume    The associated volume
- * @param   {number}       [index=0] The index of the slice
- * @param   {string}       [axis='z']      For now only 'x', 'y' or 'z' but later it will change to a normal vector
+ * @param   {number}       [index=0] The initial index of the slice
+ * @param   {AxisIndex}   [AxisIndex.Z]
  * @see Volume
  */
-function VolumeSlice(volume, index, axis) {
+class VolumeSlice {
 
-	const slice = this;
+	constructor(volume: Volume, index: number, axis: AxisIndex) {
+		this.volume = volume;
+		this.index = index;
+		this.axis = axis;
+
+		Object.defineProperty(this, 'index', {
+			get: () => {
+
+				return index;
+
+			},
+			set: (value: number) => {
+
+				index = value;
+				this.geometryNeedsUpdate = true;
+				return index;
+
+			}
+		});
+
+		this.canvas = document.createElement('canvas');
+		this.canvasBuffer = document.createElement('canvas');
+
+		this.updateGeometry();
+
+		const canvasMap = new Texture(this.canvas);
+		canvasMap.minFilter = LinearFilter;
+		canvasMap.wrapS = canvasMap.wrapT = ClampToEdgeWrapping;
+		const material = new MeshBasicMaterial({ map: canvasMap, side: DoubleSide, });
+		this.mesh = new Mesh(this.geometry, material);
+		this.mesh.matrixAutoUpdate = false;
+		this.geometryNeedsUpdate = true;
+
+		this.repaint();
+
+	};
+
 	/**
 	 * @member {Volume} volume The associated volume
 	 */
-	this.volume = volume;
+	volume: Volume;
+
 	/**
 	 * @member {Number} index The index of the slice, if changed, will automatically call updateGeometry at the next repaint
 	 */
-	index = index || 0;
-	Object.defineProperty(this, 'index', {
-		get: function () {
+	index: number;
 
-			return index;
-
-		},
-		set: function (value) {
-
-			index = value;
-			slice.geometryNeedsUpdate = true;
-			return index;
-
-		}
-	});
 	/**
-	 * @member {String} axis The normal axis
+	 * @member {AxisIndex} axis The normal axis
 	 */
-	this.axis = axis || 'z';
+	axis: AxisIndex;
 
 	/**
 	 * @member {HTMLCanvasElement} canvas The final (offscreen) canvas used for the texture	
 	 */
-	this.canvas = document.createElement('canvas');
+	private canvas;
 	/**
 	 * @member {HTMLCanvasElement} canvasBuffer The (offscreen) canvas used for intermediary to painting of the data (filtering)
 	 */
-	this.canvasBuffer = document.createElement('canvas');
-	this.updateGeometry();
+	private canvasBuffer;
 
-
-	const canvasMap = new Texture(this.canvas);
-	canvasMap.minFilter = LinearFilter;
-	canvasMap.wrapS = canvasMap.wrapT = ClampToEdgeWrapping;
-	const material = new MeshBasicMaterial({ map: canvasMap, side: DoubleSide, });
 	/**
 	 * @member {Mesh} mesh The mesh ready to get used in the scene
 	 */
-	this.mesh = new Mesh(this.geometry, material);
-	this.mesh.matrixAutoUpdate = false;
+	mesh;
+
 	/**
 	 * @member {Boolean} geometryNeedsUpdate If set to true, updateGeometry will be triggered at the next repaint
 	 */
-	this.geometryNeedsUpdate = true;
-	this.repaint();
+	private geometryNeedsUpdate;
 
 	/**
 	 * @member {Number} iLength Width of slice in the original coordinate system, corresponds to the width of the buffer canvas
 	 */
-
+	private iLength: number = 0;
 	/**
 	 * @member {Number} jLength Height of slice in the original coordinate system, corresponds to the height of the buffer canvas
 	 */
+	private jLength: number = 0;
 
 	/**
 	 * @member {Function} sliceAccess Function that allow the slice to access right data
@@ -89,19 +110,15 @@ function VolumeSlice(volume, index, axis) {
 	 * @param {Number} j The second coordinate
 	 * @returns {Number} the index corresponding to the voxel in volume.data of the given position in the slice
 	 */
+	private sliceAccess;
 
-
-}
-
-VolumeSlice.prototype = {
-
-	constructor: VolumeSlice,
+	private geometry: THREE.BufferGeometry | undefined;
 
 	/**
 	 * @member {Function} repaint Refresh the texture and the geometry if geometryNeedsUpdate is set to true
 	 * @memberof VolumeSlice
 	 */
-	repaint: function () {
+	repaint() {
 
 		if (this.geometryNeedsUpdate) {
 			this.updateGeometry();
@@ -110,6 +127,7 @@ VolumeSlice.prototype = {
 		const iLength = this.iLength,
 			jLength = this.jLength,
 			volume = this.volume;
+
 		const ctxBuffer = this.canvasBuffer.getContext('2d');
 
 		// get the ImageData object from the intermediary canvas. It is where the updated image will be drawn.
@@ -138,6 +156,7 @@ VolumeSlice.prototype = {
 		const layers = [{ layerVol: volume, pixelAccess: this.sliceAccess, mixRatio: volMixRatio }];
 		//one more layer for each overlay volumes 
 		volume.overlays.forEach((overlayVol: Volume) => {
+			//FIXME  inefficient, call extractPerpendicularPlane() only once per Slice index change, not for every repaints 
 			const extracted = overlayVol.extractPerpendicularPlane(this.axis, this.index, volume.matrix);
 			layers.push({ layerVol: overlayVol, pixelAccess: extracted.sliceAccess, mixRatio: overlayMixRatio });
 		});
@@ -165,7 +184,7 @@ VolumeSlice.prototype = {
 
 					if (colorTable) {
 						//if a color table is supplied, voxel value is the index at which the color defined in the lut
-						const colorIndex = parseInt(value);
+						const colorIndex = Math.trunc(value);
 						const color = colorTable[colorIndex];
 						if (color) {
 							[r, g, b,] = color.color;
@@ -203,22 +222,20 @@ VolumeSlice.prototype = {
 
 		this.mesh.material.map.needsUpdate = true;
 
-	},
+	};
 
 	/**
 	 * @member {Function} Refresh the geometry according to axis and index
 	 * @see Volume.extractPerpendicularPlane
 	 * @memberof VolumeSlice
 	 */
-	updateGeometry: function () {
+	private updateGeometry() {
 
 		const extracted = this.volume.extractPerpendicularPlane(this.axis, this.index);
 		this.sliceAccess = extracted.sliceAccess;
 		this.jLength = extracted.jLength;
 		this.iLength = extracted.iLength;
-		this.matrix = extracted.matrix;
 
-		//canvas dimensions are same as source image (IJK space)
 		this.canvas.width = this.iLength;
 		this.canvas.height = this.jLength;
 		this.canvasBuffer.width = this.iLength;
@@ -234,19 +251,18 @@ VolumeSlice.prototype = {
 			this.mesh.geometry = this.geometry;
 			//reset mesh matrix
 			this.mesh.matrix.identity();
-			this.mesh.applyMatrix4(this.matrix);
+			this.mesh.applyMatrix4(extracted.matrix);
 
 		}
-
 		this.geometryNeedsUpdate = false;
 
-	},
+	};
 
 	/**
 	 * @member {Function} Dispose allocated geometries, textures, materials
 	 * @memberof VolumeSlice
 	 */
-	dispose: function () {
+	dispose() {
 		//because Volume & VolumeSlice reference each other, the circular references loop needs to be broken...
 		this.volume = undefined;
 		if (this.geometry) this.geometry.dispose();
@@ -254,7 +270,7 @@ VolumeSlice.prototype = {
 			//this.mesh.material.map().dispose();
 			this.mesh.material.dispose();
 		}
-	},
+	};
 
 };
 

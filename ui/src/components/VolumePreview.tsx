@@ -36,7 +36,7 @@ import { PickingMode } from "./LandmarksManager";
 import "./VolumePreview.scss";
 
 import { getNormPointer, newXRayGlowingMaterial, setupAxesHelper } from './Utils';
-import { Volume } from "../misc/Volume";
+import { AxisIndex, Volume } from "../misc/Volume";
 import { VolumeSlice } from "../misc/VolumeSlice";
 import LandmarksManager, { CreateLandMarkOptions } from "./LandmarksManager";
 import PreviewControls from "./PreviewControls";
@@ -1175,14 +1175,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
         //(see https://webgl2fundamentals.org/webgl/lessons/webgl-data-textures.html)
         //For instance Nifti 64bits Float data can not be used for volume rendering
         let data = volume.data;
-        if (volume.datatype == Float64Array) {
+        if (volume.datatype === Float64Array) {
             data = new Float32Array(volume.data.length);
             (volume.data as Float64Array).forEach((e, i) => data[i] = e / 2);
-        } else if (volume.datatype == Int16Array || volume.datatype == Uint16Array) {
+        } else if (volume.datatype === Int16Array || volume.datatype === Uint16Array) {
             data = new Float32Array(volume.data.length);
             (volume.data as Float64Array).forEach((e, i) => data[i] = e * 1.0);
         }
 
+        //3D volume is drawn in IJK space to be handled correctly by the shader
         const texture = new THREE.DataTexture3D(data, volume.xLength, volume.yLength, volume.zLength);
 
         texture.format = THREE.RedFormat;
@@ -1275,13 +1276,13 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         //z plane
         const initSliceZ = Math.floor(volume.zLength / 4);
-        const sliceZ = volume.extractSlice('z', initSliceZ);
+        const sliceZ = volume.extractSlice(AxisIndex.Z, initSliceZ);
         sliceZ.mesh.material.visible = showZSlice;
         sliceZ.mesh.layers.enable(3);
 
         {
             sliceZ.mesh.name = 'sliceZ-mesh';
-            sliceZ.mesh.userData = { isSlice: true, isBorder: true, axis: 'z' };
+            sliceZ.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.Z };
             const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceZ.mesh.geometry),
                 new THREE.LineBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.4 })
             );
@@ -1297,13 +1298,13 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         //y plane
         const initSliceY = Math.floor(volume.yLength / 2);
-        const sliceY = volume.extractSlice('y', initSliceY);
+        const sliceY = volume.extractSlice(AxisIndex.Y, initSliceY);
         sliceY.mesh.material.visible = showYSlice;
         sliceY.mesh.layers.enable(2);
 
         {
             sliceY.mesh.name = 'sliceY-mesh';
-            sliceY.mesh.userData = { isSlice: true, isBorder: true, axis: 'y' };
+            sliceY.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.Y };
             const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceY.mesh.geometry),
                 new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 })
             );
@@ -1320,13 +1321,13 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         //x plane
         const initSliceX = Math.floor(volume.xLength / 2);
-        const sliceX = volume.extractSlice('x', initSliceX);
+        const sliceX = volume.extractSlice(AxisIndex.X, initSliceX);
         sliceX.mesh.material.visible = showXSlice;
         sliceX.mesh.layers.enable(1);
 
         {
             sliceX.mesh.name = 'sliceX-mesh';
-            sliceX.mesh.userData = { isSlice: true, isBorder: true, axis: 'x' };
+            sliceX.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.X };
             const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceX.mesh.geometry),
                 new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.4 })
             );

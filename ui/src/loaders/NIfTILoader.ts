@@ -8,7 +8,7 @@ import {
 } from 'three';
 
 //import { Volume } from 'three/examples/jsm/misc/Volume.js';
-import { Volume } from '../misc/Volume';
+import { AxisIndex, Volume } from '../misc/Volume';
 
 import * as Nifti from "nifti-reader-js";
 import { rowArrayToMatrix4 } from '../components/Utils';
@@ -270,11 +270,6 @@ class NIfTILoader extends Loader {
 				const min_max = volume.computeMinMax();
 				const min = min_max[0];
 				const max = min_max[1];
-				volume.min = min;
-				volume.max = max;
-				// attach the scalar range to the volume
-				volume.windowLow = min;
-				volume.windowHigh = max;
 
 				// get the image dimensions
 
@@ -282,17 +277,13 @@ class NIfTILoader extends Loader {
 				const nbDimension = Math.min(niftiHeader.dims[0], 3)
 				//FIXME Assume 3 space dimensions here...
 				//Width of the volume in the IJK coordinate system
-				volume.xLength = dimensions[0];
+				volume.xLength = dimensions[AxisIndex.X];
 				//Height of the volume in the IJK coordinate system
-				volume.yLength = dimensions[1];
+				volume.yLength = dimensions[AxisIndex.Y];
 				//Depth of the volume in the IJK coordinate system
-				volume.zLength = dimensions[2];
-
-				// axis order is fixed in NIfTI1 (RAS+)
-				volume.axisOrder = ['x', 'y', 'z'];
+				volume.zLength = dimensions[AxisIndex.Z];
 
 				//--------------------------------------
-				// FIXME: for this prototype, let's assume IJK and RAS are identical for now...
 
 				// spacing
 				volume.spacing = spacings;
@@ -303,21 +294,10 @@ class NIfTILoader extends Loader {
 				volume.inverseMatrix = volume.matrix.clone().invert();
 
 				//dimensions of the volume in the RAS space
-				volume.RASDimensions = [dimensions[0] * spacings[0], dimensions[1] * spacings[1], dimensions[2] * spacings[2]];
+				volume.RASDimensions = [dimensions[AxisIndex.X] * spacings[AxisIndex.X], dimensions[AxisIndex.Y] * spacings[AxisIndex.Y], dimensions[AxisIndex.Z] * spacings[AxisIndex.Z]];
 
 
 				//FIXME volume.offset seems to be unused 
-
-
-				// .. and set the default threshold
-				// only if the threshold was not already set
-				if (volume.lowerThreshold === - Infinity) {
-					volume.lowerThreshold = min;
-				}
-
-				if (volume.upperThreshold === Infinity) {
-					volume.upperThreshold = max;
-				}
 
 
 			}
