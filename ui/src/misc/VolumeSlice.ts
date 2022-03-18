@@ -19,14 +19,16 @@ import { AxisIndex, Volume } from './Volume';
  * @param   {Volume} volume    The associated volume
  * @param   {number}       [index=0] The initial index of the slice
  * @param   {AxisIndex}   [AxisIndex.Z]
+ * @param   {shallow}   [false] set to true to create a shallow slice that doesn't own geometry/canvas, and is just used to access its image data  
  * @see Volume
  */
 class VolumeSlice {
 
-	constructor(volume: Volume, index: number, axis: AxisIndex) {
+	constructor(volume: Volume, index: number, axis: AxisIndex, shallow?: boolean) {
 		this.volume = volume;
 		this.index = index;
 		this.axis = axis;
+		this.shallow = shallow === true;
 
 		Object.defineProperty(this, 'index', {
 			get: () => {
@@ -43,17 +45,22 @@ class VolumeSlice {
 			}
 		});
 
-		this.canvas = document.createElement('canvas');
-		this.canvasBuffer = document.createElement('canvas');
+		if (!shallow) {
+			this.canvas = document.createElement('canvas');
+			this.canvasBuffer = document.createElement('canvas');
+		}
 
 		this.updateGeometry();
 
-		const canvasMap = new Texture(this.canvas);
-		canvasMap.minFilter = LinearFilter;
-		canvasMap.wrapS = canvasMap.wrapT = ClampToEdgeWrapping;
-		const material = new MeshBasicMaterial({ map: canvasMap, side: DoubleSide, });
-		this.mesh = new Mesh(this.geometry, material);
-		this.mesh.matrixAutoUpdate = false;
+		if (!shallow) {
+			const canvasMap = new Texture(this.canvas);
+			canvasMap.minFilter = LinearFilter;
+			canvasMap.wrapS = canvasMap.wrapT = ClampToEdgeWrapping;
+			const material = new MeshBasicMaterial({ map: canvasMap, side: DoubleSide, });
+
+			this.mesh = new Mesh(this.geometry, material);
+			this.mesh.matrixAutoUpdate = false;
+		}
 		this.geometryNeedsUpdate = true;
 
 		this.repaint();
@@ -74,6 +81,11 @@ class VolumeSlice {
 	 * @member {AxisIndex} axis The normal axis
 	 */
 	axis: AxisIndex;
+
+	/**
+	 * @member {boolean} shallow set to true for slice without geometry/canvas (for overlay Volume)
+	 */
+	shallow: boolean;
 
 	/**
 	 * @member {HTMLCanvasElement} canvas The final (offscreen) canvas used for the texture	
@@ -110,7 +122,7 @@ class VolumeSlice {
 	 * @param {Number} j The second coordinate
 	 * @returns {Number} the index corresponding to the voxel in volume.data of the given position in the slice
 	 */
-	private sliceAccess;
+	private sliceAccess: ((i: number, j: number) => number);
 
 	private geometry: THREE.BufferGeometry | undefined;
 
@@ -122,6 +134,9 @@ class VolumeSlice {
 
 		if (this.geometryNeedsUpdate) {
 			this.updateGeometry();
+		}
+		if (this.shallow) {
+			return;
 		}
 
 		const iLength = this.iLength,
@@ -155,17 +170,20 @@ class VolumeSlice {
 		//1rst layer is main volume
 		const layers = [{ layerVol: volume, pixelAccess: this.sliceAccess, mixRatio: volMixRatio }];
 		//one more layer for each overlay volumes 
-		volume.overlays.forEach((overlayVol: Volume) => {
-			//FIXME  inefficient, call extractPerpendicularPlane() only once per Slice index change, not for every repaints 
-			const extracted = overlayVol.extractPerpendicularPlane(this.axis, this.index, volume.matrix);
-			layers.push({ layerVol: overlayVol, pixelAccess: extracted.sliceAccess, mixRatio: overlayMixRatio });
+		volume.overlays.forEach(overlayVol => {
+			const overlaySlice = overlayVol.getSlice(this.axis);
+			if (overlaySlice) {
+				overlaySlice.index = this.index;
+				overlaySlice.repaint();
+				layers.push({ layerVol: overlayVol, pixelAccess: overlaySlice.sliceAccess, mixRatio: overlayMixRatio });
+			}
 		});
 
 		//combine images
 		layers.forEach(({ layerVol, pixelAccess, mixRatio }) => {
 
 			const srcData = layerVol.data;
-			const colorTable = layerVol.colorTable;
+			const colorTable = layerVol.lookupTable;
 			//filter values to apply to the image 
 			const windowLow = layerVol.windowLow;
 			const windowHigh = layerVol.windowHigh;
@@ -220,7 +238,10 @@ class VolumeSlice {
 
 		});
 
-		this.mesh.material.map.needsUpdate = true;
+		const colorMap = (this.mesh?.material as THREE.MeshBasicMaterial).map;
+		if (colorMap) {
+			colorMap.needsUpdate = true;
+		}
 
 	};
 
@@ -231,31 +252,41 @@ class VolumeSlice {
 	 */
 	private updateGeometry() {
 
-		const extracted = this.volume.extractPerpendicularPlane(this.axis, this.index);
+		const extracted = this.volume.extractPerpendicularPlane(this.axis, this.index, this.shallow ? this.volume.mainVolumeMatrix : undefined);
 		this.sliceAccess = extracted.sliceAccess;
 		this.jLength = extracted.jLength;
 		this.iLength = extracted.iLength;
 
-		this.canvas.width = this.iLength;
-		this.canvas.height = this.jLength;
-		this.canvasBuffer.width = this.iLength;
-		this.canvasBuffer.height = this.jLength;
+		//canvas dimensions are same as source image (IJK space)
+		if (!this.shallow) {
+			this.canvas.width = this.iLength;
+			this.canvas.height = this.jLength;
+			this.canvasBuffer.width = this.iLength;
+			this.canvasBuffer.height = this.jLength;
 
-		if (this.geometry) this.geometry.dispose(); // dispose existing geometry
+			if (this.geometry) this.geometry.dispose(); // dispose existing geometry
 
-		//plane holding the slice has dimensions in RAS space
-		this.geometry = new PlaneGeometry(extracted.planeWidth, extracted.planeHeight);
+			//plane holding the slice has dimensions in RAS space
+			this.geometry = new PlaneGeometry(extracted.planeWidth, extracted.planeHeight);
 
-		if (this.mesh) {
+			if (this.mesh) {
 
-			this.mesh.geometry = this.geometry;
-			//reset mesh matrix
-			this.mesh.matrix.identity();
-			this.mesh.applyMatrix4(extracted.matrix);
+				this.mesh.geometry = this.geometry;
+				//reset mesh matrix
+				this.mesh.matrix.identity();
+				this.mesh.applyMatrix4(extracted.matrix);
 
+			}
 		}
 		this.geometryNeedsUpdate = false;
 
+	};
+
+	getVoxelIndexAtUV(uv: THREE.Vector2) {
+		const [u, v] = uv.toArray();
+		const i = Math.round(u * this.iLength);
+		const j = Math.round((1 - v) * this.jLength);
+		return this.volume.data[this.sliceAccess(i, j)];
 	};
 
 	/**

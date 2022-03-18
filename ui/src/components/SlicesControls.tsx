@@ -22,7 +22,7 @@ type SlicesControlsProps = {
 const SlicesControls = (props: SlicesControlsProps) => {
 
     const [volumeLoaded,] = useAtom(StAtm.volumeLoaded);
-    const [overlayUrl,] = useAtom(StAtm.overlayUrl);
+    const [loadOverlay,] = useAtom(StAtm.loadOverlay);
 
     const setCameraPOV = useSetAtom(StAtm.cameraPOV);
 
@@ -275,7 +275,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
                 />
             </div>
             {
-                overlayUrl ?
+                loadOverlay ?
                     <div
                         style={{
                             marginTop: 16, borderTop: "solid 1px #d1d1d1", padding: 10,

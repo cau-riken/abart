@@ -6,7 +6,7 @@ import {
 } from 'three';
 import { VolumeSlice } from './VolumeSlice';
 
-export type IndexedColorEntry = {
+export type IndexedRegionColorEntry = {
 	index: number,
 	abbrev: string,
 	hemisph: string,
@@ -25,9 +25,9 @@ export const parseColorLUT = (text: string) => {
 			const [, colorNum, hemisph, abbrev, r, g, b, a] = parts;
 			const index = parseInt(colorNum);
 			maxIndex = Math.max(maxIndex, index);
-			return { index, abbrev, hemisph, color: [parseInt(r), parseInt(g), parseInt(b), parseInt(a)] } as IndexedColorEntry;
+			return { index, abbrev, hemisph, color: [parseInt(r), parseInt(g), parseInt(b), parseInt(a)] } as IndexedRegionColorEntry;
 		});
-	const lut = new Array<IndexedColorEntry>(maxIndex + 1);
+	const lut = new Array<IndexedRegionColorEntry>(maxIndex + 1);
 	entries.forEach(e => lut[e.index] = e);
 	return lut;
 };
@@ -110,7 +110,7 @@ class Volume {
 	/**
 	 * @member {Array} sliceList The list of all the slices associated to this volume
 	 */
-	sliceList: [VolumeSlice, VolumeSlice, VolumeSlice] = new Array(3);
+	sliceList: [VolumeSlice | undefined, VolumeSlice | undefined, VolumeSlice | undefined] = [undefined, undefined, undefined];
 
 	/**
 	 * @member {Array} RASDimensions This array holds the dimensions of the volume in the RAS space
@@ -128,9 +128,24 @@ class Volume {
 	mixRatio: number = 1;
 
 	/**
-	 * @member {IndexedColorEntry[]} colorTable optional color lookup table if volume contains indexed colors images.
+	 * @member {IndexedRegionColorEntry[]} lookupTable optional color/region lookup table if volume contains indexed colors images.
 	 */
-	colorTable?: IndexedColorEntry[];
+	lookupTable?: IndexedRegionColorEntry[];
+
+	/**
+	 * @member {Matrix4} matrix The IJK to RAS matrix of the main Volume this volume is overlayed on
+	 */
+	mainVolumeMatrix?: Matrix4;
+
+	/**
+	 * @member {Function} 
+	 * @param {AxisIndex}            axis  the normal axis to the slice	
+	 * */
+	getSlice(axis: AxisIndex) {
+
+		return this.sliceList[axis];
+
+	}
 
 	/**
 	 * @member {Function} getData Shortcut for data[access(i,j,k)]
@@ -178,7 +193,7 @@ class Volume {
 	 * @memberof Volume
 	 * @param {AxisIndex}            axis  the normal axis to the slice
 	 * @param {number}            sliceRASIndex RAS index of the slice 
-	 * @param {Matrix4}            mainVolMatrix matrix of the main volume this volume is overlayed on (undefined if this volume is not an overlay).
+	 * @param {Matrix4}            mainVolMatrix matrix of the main volume this volume is overlayed on (undefined if this volume is not used as an overlay).
 	 * @returns {Object} an object containing all the useful information on the geometry of the slice
 	 */
 	extractPerpendicularPlane(axis: AxisIndex, sliceRASIndex: number, mainVolMatrix?: Matrix4) {
@@ -351,13 +366,25 @@ class Volume {
 	 * @param {number}            index the index of the slice
 	 * @returns {VolumeSlice} the extracted slice
 	 */
-	extractSlice(axis: AxisIndex, index: number) {
+	extractSlice(axis: AxisIndex, index: number, shallow?: boolean) {
 
-		const slice = new VolumeSlice(this, index, axis);
+		const slice = new VolumeSlice(this, index, axis, shallow);
 		this.sliceList[axis] = slice;
 		return slice;
 
 	};
+
+	prepareSlices(mainVolume?: Volume) {
+		const shallow = typeof mainVolume != 'undefined';
+		if (mainVolume) {
+			this.mainVolumeMatrix = mainVolume.matrix.clone();
+		}
+
+		const initSliceIndexes = [Math.floor(this.xLength / 2), Math.floor(this.yLength / 2), Math.floor(this.zLength / 4)];
+		for (const axis of Object.values(AxisIndex).map(v => Number(v))) {
+			this.extractSlice(axis, initSliceIndexes[axis], shallow);
+		}
+	}
 
 	/**
 	 * @member {Function} repaintAllSlices Call repaint on all the slices extracted from this volume
@@ -367,12 +394,9 @@ class Volume {
 	 */
 	repaintAllSlices() {
 
-		this.sliceList.forEach(function (slice) {
-
-			slice.repaint();
-
-		});
-
+		this.sliceList.forEach((slice) =>
+			slice && slice.repaint()
+		);
 		return this;
 
 	};

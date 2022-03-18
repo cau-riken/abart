@@ -36,12 +36,13 @@ import { PickingMode } from "./LandmarksManager";
 import "./VolumePreview.scss";
 
 import { getNormPointer, newXRayGlowingMaterial, setupAxesHelper } from './Utils';
-import { AxisIndex, Volume } from "../misc/Volume";
+import { AxisIndex, IndexedRegionColorEntry, parseColorLUT, Volume } from "../misc/Volume";
 import { VolumeSlice } from "../misc/VolumeSlice";
 import LandmarksManager, { CreateLandMarkOptions } from "./LandmarksManager";
 import PreviewControls from "./PreviewControls";
 import { EventDispatcher } from "three";
 import HelpNavigation from "./HelpNavigation";
+import { RegistrationTask } from "../RegistrationTaskHandler";
 
 
 type ListenerInfo = {
@@ -161,7 +162,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [isLoading, setIsLoading] = useAtom(StAtm.isLoading);
     const [volumeLoaded, setVolumeLoaded] = useAtom(StAtm.volumeLoaded);
     const [volumeFile,] = useAtom(StAtm.volumeFile);
-    const [overlayUrl,] = useAtom(StAtm.overlayUrl);
+    const [remoteTask, ] = useAtom(StAtm.remoteTask);
+
+    const [loadOverlay, setLoadOverlay] = useAtom(StAtm.loadOverlay);
 
     const [alertMessage, setAlertMessage] = useAtom(StAtm.alertMessage);
 
@@ -215,6 +218,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [mriBoxMinMax, setMRIBoxMinMax] = React.useState({ min: [0, 0, 0], max: [0, 0, 0] });
     const [landmarksManager, setLandmarksManager] = React.useState<LandmarksManager>();
 
+    const [focusedRegion, setFocusedRegion] = React.useState<IndexedRegionColorEntry | undefined>();
 
     const volRendererContainer = React.useRef<HTMLDivElement>(null);
     const clock = React.useRef(new THREE.Clock());
@@ -311,7 +315,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
             if (sliceZRendCont && obj3d.current.rendZ) {
                 obj3d.current.rendZ.setSize(sliceZRendCont.offsetWidth, sliceZRendCont.offsetHeight);
             }
-            landmarksManager?.showMarkBulletsBySlices([0, 1, 2], [indexX, indexY, indexZ]);
+            landmarksManager?.showMarkBulletsBySlices([AxisIndex.X, AxisIndex.Y, AxisIndex.Z], [indexX, indexY, indexZ]);
         }
 
         handleResize();
@@ -392,7 +396,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
                     if (closest.pov === cameraPOV && closest.dist < 0.45) {
                         //not worth animating the transition
-                        changeCameraPOV(targetPosition, cameraRotation.up);
+                        changeCameraPOV(targetPosition, cameraRotation.up, true);
 
                     } else {
                         let mainTween;
@@ -558,12 +562,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         if (volumeLoaded && obj3d.current.sliceX) {
             obj3d.current.sliceX.index = indexX;
-            obj3d.current.sliceX.repaint.call(obj3d.current.sliceX);
+            obj3d.current.sliceX.repaint();
             if (brainModelMode === StAtm.BrainModelMode.Clipped) {
                 refreshClippingPlanes(StAtm.PlaneIndex.X);
             }
 
-            landmarksManager?.showMarkBulletsBySlices([0], [indexX, indexY, indexZ])
+            landmarksManager?.showMarkBulletsBySlices([AxisIndex.X], [indexX, indexY, indexZ])
 
             renderAll();
         }
@@ -575,12 +579,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         if (volumeLoaded && obj3d.current.sliceY) {
             obj3d.current.sliceY.index = indexY;
-            obj3d.current.sliceY.repaint.call(obj3d.current.sliceY);
+            obj3d.current.sliceY.repaint();
             if (brainModelMode === StAtm.BrainModelMode.Clipped) {
                 refreshClippingPlanes(StAtm.PlaneIndex.Y);
             }
 
-            landmarksManager?.showMarkBulletsBySlices([1], [indexX, indexY, indexZ])
+            landmarksManager?.showMarkBulletsBySlices([AxisIndex.Y], [indexX, indexY, indexZ])
 
             renderAll();
         }
@@ -592,12 +596,12 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         if (volumeLoaded && obj3d.current.sliceZ) {
             obj3d.current.sliceZ.index = indexZ;
-            obj3d.current.sliceZ.repaint.call(obj3d.current.sliceZ);
+            obj3d.current.sliceZ.repaint();
             if (brainModelMode === StAtm.BrainModelMode.Clipped) {
                 refreshClippingPlanes(StAtm.PlaneIndex.Z);
             }
 
-            landmarksManager?.showMarkBulletsBySlices([2], [indexX, indexY, indexZ])
+            landmarksManager?.showMarkBulletsBySlices([AxisIndex.Z], [indexX, indexY, indexZ])
 
             renderAll();
         }
@@ -727,6 +731,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         clearBeforeVolumeChange();
 
         setVolumeLoaded(false);
+        setLoadOverlay(false);
         setViewMode(StAtm.ViewMode.None);
         setAnimateTransition(false);
         setCameraPOV(StAtm.CameraPOV.Free);
@@ -849,45 +854,60 @@ const VolumePreview = (props: VolumePreviewProps) => {
     );
 
     React.useEffect(() => {
-        if (obj3d.current.volume && overlayUrl) {
+        if (obj3d.current.volume && remoteTask && loadOverlay) {
             setIsLoading(true);
             const niftiloadr = new NIfTILoader();
-            niftiloadr.load(overlayUrl,
-                function onload(overlayVol) {
-                    if (overlayVol) {
-                        //FIXME check that overlay has same geometry as main volume
-                        //i.e. same nb of slices, same spacings (?)
-                        obj3d.current.volume.overlays.push(overlayVol);
-                        setVolumeMixRatio(0.5);
-                        obj3d.current.volume.repaintAllSlices();
-                    }
-                    setIsLoading(false);
 
-                },
-                function onProgress(request: ProgressEvent) {
-                    //console.log('onProgress', request)
-                },
-                function onError(e: ErrorEvent) {
-                    setIsLoading(false);
-                    console.error(e);
-                    setAlertMessage(
-                        <p>
-                            Couldn't load the result for preview.
-                            <br />
-                            {
-                                e.message
-                                    ?
-                                    <p>Reason:<pre>{e.message}</pre></p>
-                                    :
-                                    null
-                            }
-                        </p>);
-                },
+            //load color table for Atlas labels
+            RegistrationTask.downloadAsBlob(remoteTask.getDownloadColorLUTUrl(),
+                (filename, data) => {
+                    data.text().then(
+                        content => {
+                            const lut = parseColorLUT(content);
 
-            );
+                            niftiloadr.load(remoteTask.getDownloadLabelsUrl(),
+                                function onload(overlayVol) {
+                                    if (overlayVol) {
+                                        //FIXME check that overlay has same geometry as main volume
+                                        //i.e. same nb of slices, same spacings (?)
+                                        overlayVol.lookupTable = lut;
+                                        overlayVol.prepareSlices(obj3d.current.volume);
+                                        obj3d.current.volume?.overlays.push(overlayVol);
+                                        setVolumeMixRatio(0.5);
+                                        obj3d.current.volume?.repaintAllSlices();
+                                    }
+                                    setIsLoading(false);
+
+                                },
+                                undefined,
+                                function onError(e: ErrorEvent) {
+                                    setIsLoading(false);
+                                    console.error(e);
+                                    setAlertMessage(
+                                        <p>
+                                            Couldn't load the result for preview.
+                                            <br />
+                                            {
+                                                e.message
+                                                    ?
+                                                    <p>Reason:<pre>{e.message}</pre></p>
+                                                    :
+                                                    null
+                                            }
+                                        </p>);
+                                },
+
+
+
+                            );
+
+                        }
+                    )
+                });
+
         }
 
-    }, [overlayUrl]
+    }, [loadOverlay]
     );
 
     const adjustSliceCamOnResize = (
@@ -1236,7 +1256,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
         const wrapper = new THREE.Group();
         wrapper.add(mesh);
         //resize to RAS space
-        wrapper.scale.set(volume.spacing[0], volume.spacing[1], volume.spacing[2]);
+        wrapper.scale.set(volume.spacing[AxisIndex.X], volume.spacing[AxisIndex.Y], volume.spacing[AxisIndex.Z]);
 
         scene.add(wrapper);
         obj3d.current.vol3D = wrapper;
@@ -1277,70 +1297,74 @@ const VolumePreview = (props: VolumePreviewProps) => {
         //z plane
         const initSliceZ = Math.floor(volume.zLength / 4);
         const sliceZ = volume.extractSlice(AxisIndex.Z, initSliceZ);
-        sliceZ.mesh.material.visible = showZSlice;
-        sliceZ.mesh.layers.enable(3);
+        if (sliceZ.mesh) {
+            sliceZ.mesh.material.visible = showZSlice;
+            sliceZ.mesh.layers.enable(3);
 
-        {
-            sliceZ.mesh.name = 'sliceZ-mesh';
-            sliceZ.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.Z };
-            const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceZ.mesh.geometry),
-                new THREE.LineBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.4 })
-            );
-            border.layers.enable(1);
-            border.layers.enable(2);
-            sliceZ.mesh.add(border);
+            {
+                sliceZ.mesh.name = 'sliceZ-mesh';
+                sliceZ.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.Z };
+                const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceZ.mesh.geometry),
+                    new THREE.LineBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.4 })
+                );
+                border.layers.enable(1);
+                border.layers.enable(2);
+                sliceZ.mesh.add(border);
+            }
+
+            scene.add(sliceZ.mesh);
+            obj3d.current.sliceZ = sliceZ;
+            setIndexZ(obj3d.current.sliceZ.index);
+            setMaxIndexZ(volume.zLength - 1);
         }
-
-        scene.add(sliceZ.mesh);
-        obj3d.current.sliceZ = sliceZ;
-        setIndexZ(obj3d.current.sliceZ.index);
-        setMaxIndexZ(volume.zLength - 1);
 
         //y plane
         const initSliceY = Math.floor(volume.yLength / 2);
         const sliceY = volume.extractSlice(AxisIndex.Y, initSliceY);
-        sliceY.mesh.material.visible = showYSlice;
-        sliceY.mesh.layers.enable(2);
+        if (sliceY.mesh) {
+            sliceY.mesh.material.visible = showYSlice;
+            sliceY.mesh.layers.enable(2);
 
-        {
-            sliceY.mesh.name = 'sliceY-mesh';
-            sliceY.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.Y };
-            const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceY.mesh.geometry),
-                new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 })
-            );
-            border.layers.enable(1);
-            border.layers.enable(3);
-            sliceY.mesh.add(border);
+            {
+                sliceY.mesh.name = 'sliceY-mesh';
+                sliceY.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.Y };
+                const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceY.mesh.geometry),
+                    new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 })
+                );
+                border.layers.enable(1);
+                border.layers.enable(3);
+                sliceY.mesh.add(border);
+            }
+
+
+            scene.add(sliceY.mesh);
+            obj3d.current.sliceY = sliceY;
+            setIndexY(obj3d.current.sliceY.index);
+            setMaxIndexY(volume.yLength - 1);
         }
-
-
-        scene.add(sliceY.mesh);
-        obj3d.current.sliceY = sliceY;
-        setIndexY(obj3d.current.sliceY.index);
-        setMaxIndexY(volume.yLength - 1);
-
         //x plane
         const initSliceX = Math.floor(volume.xLength / 2);
         const sliceX = volume.extractSlice(AxisIndex.X, initSliceX);
-        sliceX.mesh.material.visible = showXSlice;
-        sliceX.mesh.layers.enable(1);
+        if (sliceX.mesh) {
+            sliceX.mesh.material.visible = showXSlice;
+            sliceX.mesh.layers.enable(1);
 
-        {
-            sliceX.mesh.name = 'sliceX-mesh';
-            sliceX.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.X };
-            const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceX.mesh.geometry),
-                new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.4 })
-            );
-            border.layers.enable(2);
-            border.layers.enable(3);
-            sliceX.mesh.add(border);
+            {
+                sliceX.mesh.name = 'sliceX-mesh';
+                sliceX.mesh.userData = { isSlice: true, isBorder: true, axis: AxisIndex.X };
+                const border = new THREE.LineSegments(new THREE.EdgesGeometry(sliceX.mesh.geometry),
+                    new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.4 })
+                );
+                border.layers.enable(2);
+                border.layers.enable(3);
+                sliceX.mesh.add(border);
+            }
+
+            scene.add(sliceX.mesh);
+            obj3d.current.sliceX = sliceX;
+            setIndexX(obj3d.current.sliceX.index);
+            setMaxIndexX(volume.xLength - 1);
         }
-
-        scene.add(sliceX.mesh);
-        obj3d.current.sliceX = sliceX;
-        setIndexX(obj3d.current.sliceX.index);
-        setMaxIndexX(volume.xLength - 1);
-
         //obj3d.current.sceneX.add(sliceX.mesh);
         setVolumeValMin(volume.min);
         setVolumeValMax(volume.max);
@@ -1467,15 +1491,15 @@ const VolumePreview = (props: VolumePreviewProps) => {
         if (obj3d.current.brModelPlainMats) {
 
             if (typeof planeIndex === 'undefined' || planeIndex === StAtm.PlaneIndex.X) {
-                obj3d.current.brModelPlainMats[0].clippingPlanes =
+                obj3d.current.brModelPlainMats[StAtm.PlaneIndex.X].clippingPlanes =
                     getClippingPlanes(StAtm.PlaneIndex.X, obj3d.current.sliceX.mesh.matrix.elements[12]);
             }
             if (typeof planeIndex === 'undefined' || planeIndex === StAtm.PlaneIndex.Y) {
-                obj3d.current.brModelPlainMats[1].clippingPlanes =
+                obj3d.current.brModelPlainMats[StAtm.PlaneIndex.Y].clippingPlanes =
                     getClippingPlanes(StAtm.PlaneIndex.Y, obj3d.current.sliceY.mesh.matrix.elements[13]);
             }
             if (typeof planeIndex === 'undefined' || planeIndex === StAtm.PlaneIndex.Z) {
-                obj3d.current.brModelPlainMats[2].clippingPlanes =
+                obj3d.current.brModelPlainMats[StAtm.PlaneIndex.Z].clippingPlanes =
                     getClippingPlanes(StAtm.PlaneIndex.Z, obj3d.current.sliceZ.mesh.matrix.elements[14]);
             }
 
@@ -1590,7 +1614,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.scene.add(obj3d.current.marksGroup);
 
                 //-- controls for 2D slice view : Pan & Zoom ----------------------
-                const sliceXCamDistance = mriBoxMinMax.max[0] - mriBoxMinMax.min[0];
+                const sliceXCamDistance = mriBoxMinMax.max[AxisIndex.X] - mriBoxMinMax.min[AxisIndex.X];
                 obj3d.current.camX = new THREE.OrthographicCamera();
                 obj3d.current.camX.layers.set(1);
                 obj3d.current.camX.name = 'viewX-cam';
@@ -1600,7 +1624,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.camX.position.fromArray([- sliceXCamDistance, 0, 0]);
                 obj3d.current.camX.lookAt(0, 0, 0);
 
-                const sliceYCamDistance = mriBoxMinMax.max[1] - mriBoxMinMax.min[1];
+                const sliceYCamDistance = mriBoxMinMax.max[AxisIndex.Y] - mriBoxMinMax.min[AxisIndex.Y];
                 obj3d.current.camY = new THREE.OrthographicCamera();
                 obj3d.current.camY.layers.set(2);
                 obj3d.current.camY.name = 'viewY-cam';
@@ -1610,7 +1634,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 obj3d.current.camY.position.fromArray([0, sliceYCamDistance, 0, 0]);
                 obj3d.current.camY.lookAt(0, 0, 0);
 
-                const sliceZCamDistance = mriBoxMinMax.max[2] - mriBoxMinMax.min[2];
+                const sliceZCamDistance = mriBoxMinMax.max[AxisIndex.Z] - mriBoxMinMax.min[AxisIndex.Z];
                 obj3d.current.camZ = new THREE.OrthographicCamera();
                 obj3d.current.camZ.layers.set(3);
                 obj3d.current.camZ.name = 'viewZ-cam';
@@ -1665,7 +1689,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     if (typeof rtState.current.indexX != 'undefined'
                         && typeof rtState.current.indexY != 'undefined'
                         && typeof rtState.current.indexZ != 'undefined') {
-                        landmarksManager.showMarkBulletsBySlices([0, 1, 2], [rtState.current.indexX, rtState.current.indexY, rtState.current.indexZ]);
+                        landmarksManager.showMarkBulletsBySlices([AxisIndex.X, AxisIndex.Y, AxisIndex.Z], [rtState.current.indexX, rtState.current.indexY, rtState.current.indexZ]);
                     }
                     //reset highlighted landmarks
                     setHighMarks([]);
@@ -1729,9 +1753,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const focusOnMark = (landmarkId: string) => {
         const mark = landmarksManager?.getMarkInstance(landmarkId);
         if (mark) {
-            setIndexX(mark.indices[0]);
-            setIndexY(mark.indices[1]);
-            setIndexZ(mark.indices[2]);
+            setIndexX(mark.indices[AxisIndex.X]);
+            setIndexY(mark.indices[AxisIndex.Y]);
+            setIndexZ(mark.indices[AxisIndex.Z]);
             renderAll();
         }
     };
@@ -1792,7 +1816,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     (instanceId) => {
                         setMarkInstances(landmarksManager.getMarkInstances());
                         setNextLandmarkId('');
-                        landmarksManager.showMarkBulletsBySlices([0, 1, 2], [indexX, indexY, indexZ]);
+                        landmarksManager.showMarkBulletsBySlices([AxisIndex.X, AxisIndex.Y, AxisIndex.Z], [indexX, indexY, indexZ]);
                     }
                 );
 
@@ -1807,9 +1831,9 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     PickingMode.SlicesSelection,
                 );
                 if (res.indices) {
-                    setIndexX(res.indices[0]);
-                    setIndexY(res.indices[1]);
-                    setIndexZ(res.indices[2]);
+                    setIndexX(res.indices[AxisIndex.X]);
+                    setIndexY(res.indices[AxisIndex.Y]);
+                    setIndexZ(res.indices[AxisIndex.Z]);
                 }
 
             }
@@ -1827,6 +1851,25 @@ const VolumePreview = (props: VolumePreviewProps) => {
                 rtState.current.normPointer,
                 camera, obj3d.current.scene,
                 PickingMode.Hovering,
+                undefined,
+                undefined,
+                (axis, uv) => {
+                    //labels overlay is the one with a color table 
+                    const labelsOverlay = obj3d.current.volume?.overlays.find(v => v.lookupTable);
+                    if (labelsOverlay) {
+                        const slice = labelsOverlay.getSlice(axis);
+                        if (slice) {
+                            const value = slice.getVoxelIndexAtUV(uv);
+                            const lutEntry = labelsOverlay.lookupTable ? labelsOverlay.lookupTable[value] : null;
+                            if (lutEntry) {
+                                setFocusedRegion(lutEntry);
+                            } else {
+                                setFocusedRegion(undefined);
+                            }
+                        }
+                    }
+                }
+
             );
             if (res.modified) {
                 const highlighted: string[] = [];
@@ -2181,6 +2224,35 @@ const VolumePreview = (props: VolumePreviewProps) => {
                         {/* 2D slices views */}
                         {Slice2DViews}
 
+                        {focusedRegion
+                            ?
+                            <div
+                                style={{
+                                    border: 'none',
+                                    margin: 'auto',
+                                    paddingTop: 3,
+                                    position: 'absolute',
+                                    left: 0,
+                                    width: '100%',
+                                    zIndex: 200,
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        backgroundColor: '#00000047',
+                                        color: '#FFF',
+                                        padding: '4px 8px',
+                                        borderStyle: 'solid',
+                                        borderWidth: 1,
+                                        borderColor: `rgba(${focusedRegion.color})`,
+                                    }}
+                                >{focusedRegion.abbrev}</span>
+                            </div>
+                            :
+                            null
+                        }
                         {obj3d.current.volume
                             ?
                             <div

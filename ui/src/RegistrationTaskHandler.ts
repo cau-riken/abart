@@ -125,6 +125,21 @@ export class RegistrationTask {
         );
     }
 
+    static downloadAsBlob(url: string, 
+        onDownloaded: (filename:string, data: Blob) => void) {
+        return axios({
+              url,
+              method: 'GET',
+              responseType: 'blob', 
+            }).then((response) => {
+                const filename = response.headers['content-disposition']?.split(/;\s+filename=/)[1];
+                onDownloaded?.call(null, filename, response.data);
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
+    };
+
 
     constructor(taskParams: {}) {
         this.taskParams = taskParams;
@@ -194,6 +209,14 @@ export class RegistrationTask {
 
     getDownloadRegisteredtUrl() {
         return RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/results/registered';
+    };
+
+    getDownloadColorLUTUrl() {
+        return RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/results/colorlut';
+    };
+
+    getDownloadLabelsUrl() {
+        return RegistrationTask.getApiUrlPrefix() + '/tasks/' + this.taskId + '/results/labels';
     };
 
     getDownloadResulstUrl() {

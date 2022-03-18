@@ -28,7 +28,7 @@ const ActionControls = (props: ActionControlsProps) => {
     const [showLogs, setShowLogs] = useAtom(StAtm.showLogs);
     const [, setLoglines] = useAtom(StAtm.loglines);
 
-    const [overlayUrl, setOverlayUrl] = useAtom(StAtm.overlayUrl);
+    const [, setLoadOverlay] = useAtom(StAtm.loadOverlay);
 
     return (
         <div
@@ -106,7 +106,7 @@ const ActionControls = (props: ActionControlsProps) => {
                     ?
                     <Button
                         icon="eye-open"
-                        onClick={() => setOverlayUrl(remoteTask.getDownloadRegisteredtUrl())} >Preview</Button>
+                        onClick={() => setLoadOverlay(true)} >Preview</Button>
                     :
                     null
                 }

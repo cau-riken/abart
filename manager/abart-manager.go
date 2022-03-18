@@ -133,6 +133,11 @@ func makeTransformMatrix(paramsJson string, matrixFilePath string) bool {
 		xroll := p.Rotation[0]
 		yroll := p.Rotation[1]
 		zroll := p.Rotation[2]
+		if xroll == 0 && yroll == 0 && zroll == 0 {
+			fmt.Println("Null transform - skipping pre-transform matrix:")
+			return false
+		}
+
 		//get the transformation matrix
 		rotated := mgl64.Ident3().Mul3(mgl64.Rotate3DX(xroll)).Mul3(mgl64.Rotate3DY(yroll)).Mul3(mgl64.Rotate3DZ(zroll))
 
@@ -554,6 +559,14 @@ func (api *TaskApiImpl) downloadResultsRegistered(w http.ResponseWriter, r *http
 	api.downloadResult(w, r, "results/registered/UserToAtlas_Warped.nii.gz")
 }
 
+func (api *TaskApiImpl) downloadResultsColorLUT(w http.ResponseWriter, r *http.Request) {
+	api.downloadResult(w, r, "results/atlas/sp2_label_512_3dslicer_v1.0.0.ctbl")
+}
+
+func (api *TaskApiImpl) downloadResultsLabels(w http.ResponseWriter, r *http.Request) {
+	api.downloadResult(w, r, "results/labels/AtlasToUser_labels.nii.gz")
+}
+
 func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
 
 	sendMessage := func(conn *websocket.Conn, message string) {
@@ -744,6 +757,8 @@ func handleRequests() {
 	apiRouter.HandleFunc("/tasks/{taskId}/logs", api.followTaskLogs).Methods(http.MethodGet, http.MethodOptions)
 	apiRouter.HandleFunc("/tasks/{taskId}/status", api.getTaskStatus).Methods(http.MethodGet, http.MethodOptions)
 	apiRouter.HandleFunc("/tasks/{taskId}/results/registered", api.downloadResultsRegistered).Methods(http.MethodGet, http.MethodOptions)
+	apiRouter.HandleFunc("/tasks/{taskId}/results/colorlut", api.downloadResultsColorLUT).Methods(http.MethodGet, http.MethodOptions)
+	apiRouter.HandleFunc("/tasks/{taskId}/results/labels", api.downloadResultsLabels).Methods(http.MethodGet, http.MethodOptions)
 	apiRouter.HandleFunc("/tasks/{taskId}/results/all", api.downloadResultsZip).Methods(http.MethodGet, http.MethodOptions)
 
 	apiRouter.Use(corsHnd)

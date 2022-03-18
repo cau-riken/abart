@@ -114,7 +114,7 @@ export const intermediatePositions = [
 ];
 
 export const volumeFile = atom<LoadedVolumeFile | undefined>(undefined);
-export const overlayUrl = atom<string | undefined>(undefined);
+export const loadOverlay = atom<boolean>(false);
 
 export const isLoading = atom(false);
 export const volumeLoaded = atom(false);

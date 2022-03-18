@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DragControls } from 'three/examples/jsm/controls/DragControls';
+import { AxisIndex } from '../misc/Volume';
 
 export type MarkInstance = {
     landmarkId: string,
@@ -413,7 +414,9 @@ class LandmarksManager {
         scene: THREE.Scene,
         pickingMode: PickingMode,
         createOptions?: CreateLandMarkOptions,
-        onCreated?: (instanceId: string) => void) {
+        onCreated?: (instanceId: string) => void,
+        onHoverSlice?: (axis: AxisIndex, uv :THREE.Vector2) => void,
+        ) {
 
         let modified = false;
         let appeared: string[] = [];
@@ -460,6 +463,10 @@ class LandmarksManager {
                         modified = true;
                         appeared = [...this.selectedMarks.values()].filter(instanceId => !previousSelected.has(instanceId));
                         disappeared = [...previousSelected.values()].filter(instanceId => !this.selectedMarks.has(instanceId));
+                        break;
+                    } 
+                    else if (ntrsect.object?.userData?.isSlice && ((ntrsect.object as THREE.Mesh).material as THREE.Material).visible && pickingMode === PickingMode.Hovering && ntrsect.uv) {
+                        onHoverSlice && onHoverSlice(ntrsect.object.userData.axis, ntrsect.uv);
                         break;
                     }
                 }
