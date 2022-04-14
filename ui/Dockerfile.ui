@@ -30,6 +30,7 @@ LABEL jp.riken.cau.product="ANTs based Atlas Registration Tool - User Interface"
 COPY --from=build /app/dist/index.html /usr/share/nginx/html
 COPY --from=build /app/dist/main.* /usr/share/nginx/html/
 COPY --from=build /app/dist/models /usr/share/nginx/html/models
+COPY --from=build /app/dist/resources /usr/share/nginx/html/resources
 
 #make a template from NginX default config to include reverse proxy settings with references to environment variables that will be resolved at run time.
 RUN mkdir /etc/nginx/templates/ ; \
