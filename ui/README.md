@@ -24,6 +24,9 @@ cd abart
 ui/ui_start.sh
 ```
 
-Open the UI in your web-browser : http://localhost:9090/index.html
+**Notes** : 
 
-**Note** : UI server will produce logs on the console while it is running; It can be stopped by hitting [Ctrl]-[C] key in the terminal window.
+* the UI should automatically open in your web-browser, at this url: http://localhost:9090/index.html
+
+* UI server will produce logs on the console while it is running; It can be stopped by hitting [Ctrl]-[C] key in the terminal window.
+

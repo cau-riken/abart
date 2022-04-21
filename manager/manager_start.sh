@@ -9,6 +9,7 @@ set -o allexport; source abart-manager.env ; set +o allexport;
 sudo docker network create --driver bridge --internal ${ABART_PRIVATE_NET}
 
 # start manager (in detached mode) connected to the private virtual network exposing its rest API
+printf ' abart-manager\t'
 sudo docker run --rm -d  \
  --name abart-manager  \
  --env-file abart-manager.env \

@@ -26,29 +26,18 @@ sudo docker pull rikencau/abart-manager:latest
 sudo docker pull rikencau/abart-ui:latest
 ```
 
-2. Open a terminal to start manager back-end :
+2. Start the Docker stack :
 
 ```sh
 #go to the cloned repo directory
 cd abart
-manager/manager_start.sh
+./start.sh
 ```
 
-3. Open another terminal to start UI server :
+**Notes** :
 
-```sh
-#go to the cloned repo directory
-cd abart
-ui/ui_start.sh
-```
-
-4. Open the UI in your web-browser : http://localhost:9090/index.html
-
-```sh
-xdg-open http://localhost:9090/index.html
-```
-
-**Note** : both Manager and UI server will produce logs on the console while they are running; They can be stopped by hitting [Ctrl]-[C] key in their terminal window.
-
+* the UI should automatically open in your web-browser, at this url: http://localhost:9090/index.html
+* The containers can be stopped by pressing `[Ctrl]-[C]` key in the terminal window.
+* Manager process will produce logs on the terminal console while it is running.
 
 
