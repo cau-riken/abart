@@ -37,7 +37,21 @@ cd abart
 **Notes** :
 
 * the UI should automatically open in your web-browser, at this url: http://localhost:9090/index.html
-* The containers can be stopped by pressing `[Ctrl]-[C]` key in the terminal window.
+* The containers can be stopped by pressing `[Ctrl]+[C]` key in the terminal window.
 * Manager process will produce logs on the terminal console while it is running.
+
+## Usage
+
+### Basics: load a NIfTI file, and switch view modes
+
+### 2D slices view mode
+
+### 3D slices view mode and brain model
+
+### Registration to Brain Atlas
+
+### Guided alignment using Landmarks
+
+
 
 
