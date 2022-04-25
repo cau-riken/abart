@@ -44,14 +44,26 @@ cd abart
 
 ### Basics: load a NIfTI file, and switch view modes
 
+https://user-images.githubusercontent.com/64643044/165005907-79406434-4d7c-478a-a578-e546b8788040.mp4
+
+
 ### 2D slices view mode
+
+https://user-images.githubusercontent.com/64643044/165005933-e27635f4-7ae2-4647-94da-7a37a74ad937.mp4
+
 
 ### 3D slices view mode and brain model
 
+https://user-images.githubusercontent.com/64643044/165005944-136eeefc-7e92-436e-901f-6040f750cd83.mp4
+
+
 ### Registration to Brain Atlas
+
+https://user-images.githubusercontent.com/64643044/165005960-5882149c-8d59-494d-800f-18b6b8eb5f2d.mp4
+
 
 ### Guided alignment using Landmarks
 
-
+https://user-images.githubusercontent.com/64643044/165005974-605304c1-a6cd-4a38-86af-93f18a7780cb.mp4
 
 
