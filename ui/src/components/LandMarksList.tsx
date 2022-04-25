@@ -97,7 +97,7 @@ const LandMarksList = (props: LandMarksListProps) => {
                                     <Icon
                                         icon="map-marker"
                                         style={{ marginTop: 3 }} {...(isSet ? { color: lm.color } : {})}
-                                        onDoubleClick={() => !isSet ? props.onLandmarkCreate?.call(null, lm.id) : null }
+                                        onDoubleClick={() => !isSet ? props.onLandmarkCreate?.call(null, lm.id) : null}
                                     />
 
                                     <span
@@ -105,6 +105,8 @@ const LandMarksList = (props: LandMarksListProps) => {
                                         className={isSet ? 'landmark-id' : ''}
                                         onClick={() => props.onLandmarkFocus?.call(null, lm.id)}
                                     >{lm.name}</span>
+
+                                    <span>{lm.longname}</span>
 
                                     <Popover2
                                         interactionKind="click"
@@ -123,7 +125,6 @@ const LandMarksList = (props: LandMarksListProps) => {
                                         </span>
                                     </Popover2>
 
-                                    <span>{lm.longname}</span>
 
                                     {isSet ? <span title="Delete landmark">
                                         <Icon

@@ -3,6 +3,7 @@ import { useAtom } from "jotai";
 
 import * as StAtm from '../StateAtoms';
 
+import "./HelpNavigation.scss";
 
 import {
     Collapse,
@@ -27,7 +28,9 @@ const HelpNavigation = () => {
 
     const addHelpItems = (key: number, item: string | JSX.Element) => {
         helpItems.push(
-            <div key={key} style={{ textAlign: 'center' }}>{item}</div>
+            <div key={key} className='helpnav-item' style={{}}>
+                <span>{item}</span>
+            </div>
         );
     }
     addHelpItems(1, 'Use mouse wheel to zoom in and out.');
@@ -77,7 +80,6 @@ const HelpNavigation = () => {
                     } : {
                         lineHeight: '10px',
                     })
-                    
                 }}
                 onClick={() => setIsOpen(!isOpen)}
             >
@@ -97,8 +99,6 @@ const HelpNavigation = () => {
                         gridAutoRows: '50px',
                         gap: 3,
                         borderTop: 'dotted 1px #c0c0c047',
-                        justifyItems: 'center',
-                        alignItems: 'center',
                     }}
                 >
                     {helpItems}

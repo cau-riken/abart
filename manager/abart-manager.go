@@ -621,7 +621,7 @@ func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
 				sendMessage(conn, "Task not yet started...\n")
 				//wait until task change status (either becomes running or canceled)
 				for t.status == "prepared" {
-					sendMessage(conn, "waiting...\n")
+					sendMessage(conn, "warming-up...\n")
 					time.Sleep(2 * time.Second)
 				}
 				sendMessage(conn, "Task is now "+t.status+"\n")

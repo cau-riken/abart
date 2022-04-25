@@ -22,5 +22,6 @@ cd abart
 manager/manager_start.sh
 ```
 
-**Note** : Manager will produce logs on the console while it is running; It can be stopped by hitting [Ctrl]-[C] key in its terminal window.
+**Note** : Manager will produce logs on the console while it is running; It can be stopped by hitting [Ctrl]+[C] key in its terminal window.
+
 

@@ -162,7 +162,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
     const [isLoading, setIsLoading] = useAtom(StAtm.isLoading);
     const [volumeLoaded, setVolumeLoaded] = useAtom(StAtm.volumeLoaded);
     const [volumeFile,] = useAtom(StAtm.volumeFile);
-    const [remoteTask, ] = useAtom(StAtm.remoteTask);
+    const [remoteTask,] = useAtom(StAtm.remoteTask);
 
     const [loadOverlay, setLoadOverlay] = useAtom(StAtm.loadOverlay);
 
@@ -269,19 +269,18 @@ const VolumePreview = (props: VolumePreviewProps) => {
             if (StAtm.ViewMode.Volume3D === viewMode) {
                 obj3d.current.vol3D.visible = true;
 
-                obj3d.current.sliceX.mesh.visible = false;
-                obj3d.current.sliceY.mesh.visible = false;
-                obj3d.current.sliceZ.mesh.visible = false;
+                obj3d.current.sliceX?.mesh && (obj3d.current.sliceX.mesh.visible = false);
+                obj3d.current.sliceY?.mesh && (obj3d.current.sliceY.mesh.visible = false);
+                obj3d.current.sliceZ?.mesh && (obj3d.current.sliceZ.mesh.visible = false);
             } else {
                 obj3d.current.vol3D.visible = false;
 
                 //slice object is visible to allow its children being visible,
                 //slice material might be hidden though to hide the slice in Slice3D view.
 
-                obj3d.current.sliceX.mesh.visible = true;
-                obj3d.current.sliceY.mesh.visible = true;
-                obj3d.current.sliceZ.mesh.visible = true;
-
+                obj3d.current.sliceX?.mesh && (obj3d.current.sliceX.mesh.visible = true);
+                obj3d.current.sliceY?.mesh && (obj3d.current.sliceY.mesh.visible = true);
+                obj3d.current.sliceZ?.mesh && (obj3d.current.sliceZ.mesh.visible = true);
                 obj3d.current.sliceX.mesh.material.visible = showXSlice;
                 obj3d.current.sliceY.mesh.material.visible = showYSlice;
                 obj3d.current.sliceZ.mesh.material.visible = showZSlice;
@@ -896,20 +895,14 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                             }
                                         </p>);
                                 },
-
-
-
                             );
-
                         }
                     )
                 });
-
         }
 
     }, [loadOverlay]
     );
-
     const adjustSliceCamOnResize = (
         renderer: THREE.Renderer | undefined,
         width: number,
@@ -1381,16 +1374,16 @@ const VolumePreview = (props: VolumePreviewProps) => {
 
         const plyloader = new PLYLoader()
         const brainModelClippedColors = [
-            new THREE.Color(0xFF0000),
-            new THREE.Color(0x00FF00),
-            new THREE.Color(0x0000FF),
+            0xFF0000,
+            0x00FF00,
+            0x0000FF,
         ];
         const brainModelXRayColor = new THREE.Color(0x0087ff);
 
         const clipPlanes: THREE.Plane[] = [];
 
         const clippedMats: THREE.Material[] = [];
-        [0, 1, 2].forEach(planeIndex => {
+        [StAtm.PlaneIndex.X, StAtm.PlaneIndex.Y, StAtm.PlaneIndex.Z].forEach(planeIndex => {
             const plainMat = new THREE.MeshLambertMaterial({
                 color: brainModelClippedColors[planeIndex],
                 side: THREE.DoubleSide,
@@ -1429,7 +1422,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     brainModel.name = 'brainModel-group';
 
 
-                    [0, 1, 2].forEach(planeIndex => {
+                    [StAtm.PlaneIndex.X, StAtm.PlaneIndex.Y, StAtm.PlaneIndex.Z].forEach(planeIndex => {
                         const clipXShell = createBrainModelMesh(clippedMats[planeIndex]);
                         clipXShell.visible = false;
                         brainModel.add(clipXShell);
@@ -1460,21 +1453,21 @@ const VolumePreview = (props: VolumePreviewProps) => {
         const planeNorms: THREE.Vector3[] = [];
         switch (planeIndex) {
             case StAtm.PlaneIndex.X:
-                planeNorms.push(new THREE.Vector3(-1, 0, 0));
-                planeNorms.push(new THREE.Vector3(1, 0, 0));
+                planeNorms.push(StAtm.Axes[StAtm.CameraPOV.Left].dir);
+                planeNorms.push(StAtm.Axes[StAtm.CameraPOV.Right].dir);
                 break;
             case StAtm.PlaneIndex.Y:
-                planeNorms.push(new THREE.Vector3(0, -1, 0));
-                planeNorms.push(new THREE.Vector3(0, 1, 0));
+                planeNorms.push(StAtm.Axes[StAtm.CameraPOV.Posterior].dir);
+                planeNorms.push(StAtm.Axes[StAtm.CameraPOV.Anterior].dir);
                 break;
             case StAtm.PlaneIndex.Z:
-                planeNorms.push(new THREE.Vector3(0, 0, -1));
-                planeNorms.push(new THREE.Vector3(0, 0, 1));
+                planeNorms.push(StAtm.Axes[StAtm.CameraPOV.Inferior].dir);
+                planeNorms.push(StAtm.Axes[StAtm.CameraPOV.Superior].dir);
                 break;
         }
         const clipPlanes: THREE.Plane[] = [];
         if (!isNaN(pos)) {
-            const thickness = 1.5;
+            const thickness = 0.2;
 
             clipPlanes.push(
                 new THREE.Plane(planeNorms[0], pos + thickness)
@@ -2133,7 +2126,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                     margin: 2,
                     width: 'calc(100% - 4px)', height: 'calc(100% - 4px)',
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(0,80%) minmax(190px, 20%)',
+                    gridTemplateColumns: 'minmax(0, 75%) minmax(190px, 25%)',
                     gridTemplateRows: '100%',
                     gap: '1px 3px',
                     overflow: 'hidden',

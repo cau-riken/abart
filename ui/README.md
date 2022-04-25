@@ -28,5 +28,7 @@ ui/ui_start.sh
 
 * the UI should automatically open in your web-browser, at this url: http://localhost:9090/index.html
 
-* UI server will produce logs on the console while it is running; It can be stopped by hitting [Ctrl]-[C] key in the terminal window.
+* UI server will produce logs on the console while it is running; It can be stopped by hitting [Ctrl]+[C] key in the terminal window.
+
+
 

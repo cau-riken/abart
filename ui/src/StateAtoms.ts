@@ -56,16 +56,23 @@ export enum CameraPOV {
     Inferior,
 }
 
-export const Axes = new Map([
-    [CameraPOV.Left, { label: 'L', dir: new THREE.Vector3(-1, 0, 0) }],
-    [CameraPOV.Right, { label: 'R', dir: new THREE.Vector3(1, 0, 0) }],
-    [CameraPOV.Posterior, { label: 'P', dir: new THREE.Vector3(0, -1, 0) }],
-    [CameraPOV.Anterior, { label: 'A', dir: new THREE.Vector3(0, 1, 0) }],
-    [CameraPOV.Inferior, { label: 'I', dir: new THREE.Vector3(0, 0, -1) }],
-    [CameraPOV.Superior, { label: 'S', dir: new THREE.Vector3(0, 0, 1) }],
-]);
+type Axe = { label: string, dir: THREE.Vector3 };
+export const Axes: Axe[] = [];
+{
+    Axes[CameraPOV.Left] = { label: 'L', dir: new THREE.Vector3(-1, 0, 0) };
+    Axes[CameraPOV.Right] = { label: 'R', dir: new THREE.Vector3(1, 0, 0) };
+    Axes[CameraPOV.Posterior] = { label: 'P', dir: new THREE.Vector3(0, -1, 0) };
+    Axes[CameraPOV.Anterior] = { label: 'A', dir: new THREE.Vector3(0, 1, 0) };
+    Axes[CameraPOV.Inferior] = { label: 'I', dir: new THREE.Vector3(0, 0, -1) };
+    Axes[CameraPOV.Superior] = { label: 'S', dir: new THREE.Vector3(0, 0, 1) };
+}
 
-export const CameraRotations = new Map<CameraPOV, { label: string, dir: THREE.Vector3, up: THREE.Vector3, direct: CameraPOV[] }>();
+interface CameraRotation extends Axe {
+    up: THREE.Vector3;
+    direct: CameraPOV[];
+}
+
+export const CameraRotations = new Map<CameraPOV, CameraRotation>();
 {
     [
         {
@@ -94,7 +101,7 @@ export const CameraRotations = new Map<CameraPOV, { label: string, dir: THREE.Ve
         },
     ].forEach(
         info => {
-            const axis = Axes.get(info.pov);
+            const axis = Axes[info.pov];
             if (axis) {
                 CameraRotations.set(info.pov, { ...info, ...axis })
             }
@@ -115,6 +122,7 @@ export const intermediatePositions = [
 
 export const volumeFile = atom<LoadedVolumeFile | undefined>(undefined);
 export const loadOverlay = atom<boolean>(false);
+export const overlayFile = atom<LoadedVolumeFile | undefined>(undefined);
 
 export const isLoading = atom(false);
 export const volumeLoaded = atom(false);
@@ -126,7 +134,7 @@ export const viewMode = atom(ViewMode.Slice3D);
 export const alertMessage = atom<JSX.Element | undefined>(undefined);
 
 export const deltaRotation = atom([0, 0, 0] as [number, number, number]);
-export const cameraRotation = atom({ up: [0, 0, 0] as [number, number, number], position: [0, 0, 0] as [number, number, number] });
+export const cameraRotation = atom({ up: [0, 0, 0], position: [0, 0, 0] });
 export const cameraPOV = atom(CameraPOV.Free);
 
 

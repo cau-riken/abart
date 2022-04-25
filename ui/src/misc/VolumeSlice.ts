@@ -122,7 +122,7 @@ class VolumeSlice {
 	 * @param {Number} j The second coordinate
 	 * @returns {Number} the index corresponding to the voxel in volume.data of the given position in the slice
 	 */
-	private sliceAccess: ((i: number, j: number) => number);
+	private sliceAccess: ((i: number, j: number) => number) = () => 0;
 
 	private geometry: THREE.BufferGeometry | undefined;
 
@@ -143,14 +143,14 @@ class VolumeSlice {
 			jLength = this.jLength,
 			volume = this.volume;
 
-		const ctxBuffer = this.canvasBuffer.getContext('2d');
+		const ctxBuffer = this.canvasBuffer!.getContext('2d');
 
 		// get the ImageData object from the intermediary canvas. It is where the updated image will be drawn.
 		const imgData = ctxBuffer.createImageData(iLength, jLength);
 		const destData = imgData.data;
 
 		//final canvas where all filtered image will be drawn
-		const ctx = this.canvas.getContext('2d');
+		const ctx = this.canvas!.getContext('2d');
 
 		//clear destination image 
 		ctx.globalCompositeOperation = 'source-over';
@@ -230,7 +230,7 @@ class VolumeSlice {
 			//draw on final buffer (optionally setting blending method)
 			//ctx.globalCompositeOperation = 'screen';
 			ctx.globalCompositeOperation = 'screen';
-			ctx.drawImage(this.canvasBuffer, 0, 0, iLength, jLength, 0, 0, this.canvas.width, this.canvas.height);
+			ctx.drawImage(this.canvasBuffer!, 0, 0, iLength, jLength, 0, 0, this.canvas!.width, this.canvas!.height);
 
 			//restore default composition value
 			ctx.globalCompositeOperation = 'source-over';
@@ -259,10 +259,10 @@ class VolumeSlice {
 
 		//canvas dimensions are same as source image (IJK space)
 		if (!this.shallow) {
-			this.canvas.width = this.iLength;
-			this.canvas.height = this.jLength;
-			this.canvasBuffer.width = this.iLength;
-			this.canvasBuffer.height = this.jLength;
+			this.canvas!.width = this.iLength;
+			this.canvas!.height = this.jLength;
+			this.canvasBuffer!.width = this.iLength;
+			this.canvasBuffer!.height = this.jLength;
 
 			if (this.geometry) this.geometry.dispose(); // dispose existing geometry
 
