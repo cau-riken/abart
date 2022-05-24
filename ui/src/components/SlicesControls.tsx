@@ -53,7 +53,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
         <>
             <div
             >
-                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+                <div style={{ marginTop: 0, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
                     <div
                         style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
                     >
@@ -82,42 +82,51 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         }
                     </div>
 
-                    <Slider
-                        className="x-slider"
-                        min={0}
-                        max={maxIndexX}
-                        disabled={maxIndexX <= 0}
-                        labelValues={[]}
-                        showTrackFill={false}
-                        value={indexX}
-                        onChange={setIndexX}
-                    />
-                    {props.extra
-                        ?
-                        <div
-                            style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                        >
-                            <Button
-                                disabled={!volumeLoaded}
+                    <div
+                        style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                    >
+                        {props.extra ?
+                            <div style={{ marginRight: 10, fontSize: 'small' }}>
+                                <Button
+                                    disabled={!volumeLoaded}
+                                    small
+                                    onClick={() =>
+                                        setCameraPOV(StAtm.CameraPOV.Left)
+                                    }
+                                >L</Button>
+                            </div>
+                            :
+                            null
+                        }
+                        <Slider
+                            className="x-slider"
+                            min={0}
+                            max={maxIndexX}
+                            disabled={maxIndexX <= 0}
+                            labelValues={[]}
+                            showTrackFill={false}
+                            value={indexX}
+                            onChange={setIndexX}
+                        />
+                        {props.extra ?
+                            <div style={{ marginLeft: 10, fontSize: 'small' }}>
 
-                                onClick={() =>
-                                    setCameraPOV(StAtm.CameraPOV.Left)
-                                }
-                            >L</Button>
-                            <Button
-                                disabled={!volumeLoaded}
-                                onClick={() =>
-                                    setCameraPOV(StAtm.CameraPOV.Right)
-                                }
-                            >R</Button>
+                                <Button
+                                    disabled={!volumeLoaded}
+                                    small
+                                    onClick={() =>
+                                        setCameraPOV(StAtm.CameraPOV.Right)
+                                    }
+                                >R</Button>
+                            </div>
+                            :
+                            null
+                        }
 
-                        </div>
-                        :
-                        null
-                    }
-
+                    </div>
                 </div>
-                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+
+                <div style={{ marginTop: 2, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
                     <div
                         style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
                     >
@@ -130,8 +139,7 @@ const SlicesControls = (props: SlicesControlsProps) => {
                                 setShowYSlice(!showYSlice)
                             }
                         />
-                        {props.extra
-                            ?
+                        {props.extra ?
 
                             <Switch
                                 checked={clipYBrainModel}
@@ -146,7 +154,25 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         }
 
                     </div>
+                </div>
 
+
+                <div
+                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                >
+                    {props.extra ?
+                        <div style={{ marginRight: 10, fontSize: 'small' }}>
+                            <Button
+                                disabled={!volumeLoaded}
+                                small
+                                onClick={() =>
+                                    setCameraPOV(StAtm.CameraPOV.Posterior)
+                                }
+                            >P</Button>
+                        </div>
+                        :
+                        null
+                    }
                     <Slider
                         className="y-slider"
                         min={0}
@@ -157,33 +183,22 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         value={indexY}
                         onChange={setIndexY}
                     />
-                    {props.extra
-                        ?
-
-                        <div
-                            style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                        >
+                    {props.extra ?
+                        <div style={{ marginLeft: 10, fontSize: 'small' }}>
                             <Button
                                 disabled={!volumeLoaded}
-
-                                onClick={() =>
-                                    setCameraPOV(StAtm.CameraPOV.Posterior)
-                                }
-                            >P</Button>
-                            <Button
-                                disabled={!volumeLoaded}
+                                small
                                 onClick={() =>
                                     setCameraPOV(StAtm.CameraPOV.Anterior)
                                 }
                             >A</Button>
-
                         </div>
                         :
                         null
                     }
-
                 </div>
-                <div style={{ marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
+
+                <div style={{ marginTop: 2, borderTop: "solid 1px #d1d1d1", paddingTop: 6 }}>
                     <div
                         style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
                     >
@@ -212,6 +227,24 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         }
 
                     </div>
+                </div>
+
+                <div
+                    style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
+                >
+                    {props.extra ?
+                        <div style={{ marginRight: 10, fontSize: 'small' }}>
+                            <Button
+                                disabled={!volumeLoaded}
+                                small
+                                onClick={() =>
+                                    setCameraPOV(StAtm.CameraPOV.Inferior)
+                                }
+                            >I</Button>
+                        </div>
+                        :
+                        null
+                    }
                     <Slider
                         className="z-slider"
                         min={0}
@@ -222,26 +255,16 @@ const SlicesControls = (props: SlicesControlsProps) => {
                         value={indexZ}
                         onChange={setIndexZ}
                     />
-                    {props.extra
-                        ?
 
-                        <div
-                            style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}
-                        >
+                    {props.extra ?
+                        <div style={{ marginLeft: 10, fontSize: 'small' }}>
                             <Button
                                 disabled={!volumeLoaded}
-
-                                onClick={() =>
-                                    setCameraPOV(StAtm.CameraPOV.Inferior)
-                                }
-                            >I</Button>
-                            <Button
-                                disabled={!volumeLoaded}
+                                small
                                 onClick={() =>
                                     setCameraPOV(StAtm.CameraPOV.Superior)
                                 }
                             >S</Button>
-
                         </div>
                         :
                         null

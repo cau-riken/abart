@@ -33,7 +33,7 @@ const OrientControls = () => {
     return (
         <div
             style={{
-                marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
+                marginTop: 0, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
             }}
         >
             <div

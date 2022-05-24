@@ -76,7 +76,13 @@ const PreviewControls = (props: PreviewControlsProps) => {
                             disabled={!volumeLoaded}
                             title={<span><Icon icon="cube" /> Volume</span>}
                             panel={
-                                <>
+                                <div
+                                    style={{
+                                        overflowX: 'clip',
+                                        overflowY: 'auto',
+                                        padding: '0 10px 0 4px',
+                                    }}
+                                >
                                     {orientControls}
                                     <div
                                         style={{
@@ -136,7 +142,7 @@ const PreviewControls = (props: PreviewControlsProps) => {
                                         />
 
                                     </div>
-                                </>
+                                </div>
                             } />
                         {/*<Tabs.Expander />*/}
                         <Tab
@@ -145,10 +151,17 @@ const PreviewControls = (props: PreviewControlsProps) => {
                             title={<span><Icon icon="layers" /> 3D Slices </span>}
 
                             panel={
-                                <>
+                                <div
+                                    style={{
+                                        overflowX: 'clip',
+                                        overflowY: 'auto',
+                                        padding: '0 10px 0 4px',
+                                    }}
+                                >
                                     {orientControls}
+                                    <div style={{ height: 10 }} />
                                     {slicesControls}
-                                </>
+                                </div>
                             }
                         />
 
@@ -157,7 +170,16 @@ const PreviewControls = (props: PreviewControlsProps) => {
                             disabled={!volumeLoaded}
                             title={<span><Icon icon="grid-view" /> Slices </span>}
                             panel={
-                                slicesControls
+                                <div
+                                    style={{
+                                        overflowX: 'clip',
+                                        overflowY: 'auto',
+                                        padding: '0 10px 0 4px',
+                                    }}
+                                >
+                                    {slicesControls}
+                                </div>
+
                             }
                         />
 

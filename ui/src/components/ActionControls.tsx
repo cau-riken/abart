@@ -33,12 +33,12 @@ const ActionControls = (props: ActionControlsProps) => {
     return (
         <div
             style={{
-                marginTop: 16, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
+                marginTop: 10, borderTop: "solid 1px #d1d1d1", paddingTop: 6,
             }}
         >
 
             <div
-                style={{ marginTop: 20, display: 'flex', flexDirection: 'row', justifyContent: 'space-evenly' }}
+                style={{ marginTop: 6, display: 'flex', flexDirection: 'row', justifyContent: 'space-evenly' }}
             >
 
                 <Button
