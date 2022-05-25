@@ -47,7 +47,6 @@ class VolumeSlice {
 
 		if (!shallow) {
 			this.canvas = document.createElement('canvas');
-			this.canvasBuffer = document.createElement('canvas');
 		}
 
 		this.updateGeometry();
@@ -57,6 +56,7 @@ class VolumeSlice {
 			canvasMap.minFilter = LinearFilter;
 			canvasMap.wrapS = canvasMap.wrapT = ClampToEdgeWrapping;
 			const material = new MeshBasicMaterial({ map: canvasMap, side: DoubleSide, });
+			//	, transparent: true, opacity: 0.5, depthWrite: false, depthTest: false, alphaTest: 0.5  } );
 
 			this.mesh = new Mesh(this.geometry, material);
 			this.mesh.matrixAutoUpdate = false;
@@ -92,9 +92,9 @@ class VolumeSlice {
 	 */
 	private canvas;
 	/**
-	 * @member {HTMLCanvasElement} canvasBuffer The (offscreen) canvas used for intermediary to painting of the data (filtering)
+	 * @member {HTMLCanvasElement} canvasBuffers The (offscreen) canvas used for intermediary to painting of the data (filtering, labels overlay)
 	 */
-	private canvasBuffer;
+	private canvasBuffers: HTMLCanvasElement[] = [];
 
 	/**
 	 * @member {Mesh} mesh The mesh ready to get used in the scene
@@ -143,19 +143,15 @@ class VolumeSlice {
 			jLength = this.jLength,
 			volume = this.volume;
 
-		const ctxBuffer = this.canvasBuffer!.getContext('2d');
-
-		// get the ImageData object from the intermediary canvas. It is where the updated image will be drawn.
-		const imgData = ctxBuffer.createImageData(iLength, jLength);
-		const destData = imgData.data;
-
 		//final canvas where all filtered image will be drawn
 		const ctx = this.canvas!.getContext('2d');
+		if (ctx == null) {
+			console.error("Could not create drawing context for final canvas!");
+			return;
+		}
 
 		//clear destination image 
-		ctx.globalCompositeOperation = 'source-over';
-		ctx.fillStyle = '#000';
-		ctx.fillRect(0, 0, iLength, jLength);
+		ctx.clearRect(0, 0, iLength, jLength);
 
 		//composition of main volume image with overlay image(s)
 		let volMixRatio: number;
@@ -180,63 +176,85 @@ class VolumeSlice {
 		});
 
 		//combine images
-		layers.forEach(({ layerVol, pixelAccess, mixRatio }) => {
+		layers.forEach(({ layerVol, pixelAccess, mixRatio }, layerIndex) => {
 
-			const srcData = layerVol.data;
-			const colorTable = layerVol.lookupTable;
-			//filter values to apply to the image 
-			const windowLow = layerVol.windowLow;
-			const windowHigh = layerVol.windowHigh;
-
-			let alpha = 0xff * mixRatio;
-
-			// manipulate some pixel elements
-			let pixelCount = 0;
-
-			for (let j = 0; j < jLength; j++) {
-
-				for (let i = 0; i < iLength; i++) {
-
-					let value = srcData[pixelAccess(i, j)];
-					let r, g, b;
-
-					if (colorTable) {
-						//if a color table is supplied, voxel value is the index at which the color defined in the lut
-						const colorIndex = Math.trunc(value);
-						const color = colorTable[colorIndex];
-						if (color) {
-							[r, g, b,] = color.color;
-						} else {
-							r = g = b = 0;
-						}
-					} else {
-						//apply window level and convert to 8bits value
-						value = Math.floor(255 * (value - windowLow) / (windowHigh - windowLow));
-						value = value > 255 ? 255 : (value < 0 ? 0 : value | 0);
-						r = g = b = value;
-					}
-
-					destData[4 * pixelCount] = r;
-					destData[4 * pixelCount + 1] = g;
-					destData[4 * pixelCount + 2] = b;
-					destData[4 * pixelCount + 3] = alpha;
-					pixelCount++;
-				}
+			let canvasBuffer = this.canvasBuffers[layerIndex];
+			if (typeof canvasBuffer == 'undefined') {
+				//use 1 canvas buffer per layer (lazily created)
+				canvasBuffer = document.createElement('canvas');
+				canvasBuffer!.width = this.iLength;
+				canvasBuffer!.height = this.jLength;
+				this.canvasBuffers[layerIndex] = canvasBuffer;
 			}
 
-			//update intermediary canvas with filtered image
-			ctxBuffer.putImageData(imgData, 0, 0);
+			const ctxBuffer = canvasBuffer?.getContext('2d');
 
-			//draw on final buffer (optionally setting blending method)
-			//ctx.globalCompositeOperation = 'screen';
-			ctx.globalCompositeOperation = 'screen';
-			ctx.drawImage(this.canvasBuffer!, 0, 0, iLength, jLength, 0, 0, this.canvas!.width, this.canvas!.height);
+			if (ctxBuffer == null) {
+				console.error("Could not create drawing context!");
+			} else {
+				// get empty ImageData object to draw the layer's updated image
+				const imgData = ctxBuffer.createImageData(iLength, jLength);
 
-			//restore default composition value
-			ctx.globalCompositeOperation = 'source-over';
+				const destData = imgData.data;
 
+				const srcData = layerVol.data;
+				const colorTable = layerVol.lookupTable;
 
+				//filter values to apply to the image 
+				const windowLow = layerVol.windowLow;
+				const windowHigh = layerVol.windowHigh;
+
+				const layerAlpha = 0xff * mixRatio;
+
+				// manipulate some pixel elements
+				let pixelCount = 0;
+
+				for (let j = 0; j < jLength; j++) {
+
+					for (let i = 0; i < iLength; i++) {
+
+						let value = srcData[pixelAccess(i, j)];
+						let r, g, b;
+						let alpha = layerAlpha;
+
+						if (colorTable) {
+							//if a color table is supplied, voxel value is the index at which the color defined in the lut
+							const colorIndex = Math.trunc(value);
+							const color = colorTable[colorIndex];
+							if (color) {
+								[r, g, b,] = color.color;
+							} else {
+								r = g = b = 0;
+								alpha = 0;
+							}
+						} else {
+							//apply window level and convert to 8bits value
+							value = Math.floor(255 * (value - windowLow) / (windowHigh - windowLow));
+							value = value > 255 ? 255 : (value < 0 ? 0 : value | 0);
+							r = g = b = value;
+						}
+
+						destData[4 * pixelCount] = r;
+						destData[4 * pixelCount + 1] = g;
+						destData[4 * pixelCount + 2] = b;
+						destData[4 * pixelCount + 3] = alpha;
+						pixelCount++;
+					}
+				}
+
+				//update intermediary canvas with filtered image
+				ctxBuffer.putImageData(imgData, 0, 0);
+			}
 		});
+
+		//draw on final buffer (specifically setting blending method)
+		const compositeOpbackup = ctx.globalCompositeOperation;
+		ctx.globalCompositeOperation = 'screen';
+		this.canvasBuffers.forEach(canvasBuffer =>
+			ctx.drawImage(canvasBuffer, 0, 0, iLength, jLength, 0, 0, iLength, jLength)
+		)
+		//restore default composition value
+		ctx.globalCompositeOperation = compositeOpbackup;
 
 		const colorMap = (this.mesh?.material as THREE.MeshBasicMaterial).map;
 		if (colorMap) {
@@ -261,8 +279,6 @@ class VolumeSlice {
 		if (!this.shallow) {
 			this.canvas!.width = this.iLength;
 			this.canvas!.height = this.jLength;
-			this.canvasBuffer!.width = this.iLength;
-			this.canvasBuffer!.height = this.jLength;
 
 			if (this.geometry) this.geometry.dispose(); // dispose existing geometry
 

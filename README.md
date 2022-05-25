@@ -40,6 +40,12 @@ cd abart
 * The containers can be stopped by pressing `[Ctrl]+[C]` key in the terminal window.
 * Manager process will produce logs on the terminal console while it is running.
 
+**Tested configurations:**
+
+* Linux Ubuntu 22.04lts, Docker Engine v20.10.8 / Firefox 100 & Chromium 101.
+* macOs Big Sur 11.6.6, Docker Desktop v4.8.2 (Docker Engine v20.10.14) / Firefox 91.9.1esr & Chrome 101 & Safari 15.5, but for performance reasons, the use of **Safari is not recommended**.
+
+
 ## Usage
 
 ### Basics: load a NIfTI file, and switch view modes
