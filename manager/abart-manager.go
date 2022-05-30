@@ -241,7 +241,7 @@ func NewTask() Task {
 	}
 }
 
-func TaskFromID(taskId string) Task {
+func TaskFromID(taskId string, active bool) Task {
 	taskFullDir := getTaskExistingTaskDir(taskId)
 	var status string
 	if taskFullDir == "" {
@@ -249,6 +249,12 @@ func TaskFromID(taskId string) Task {
 	} else {
 		status = getTaskExistingStatus(taskFullDir, "created")
 	}
+
+	//if stored status is "started", need to confirm the container is still running, otherwise it means it was interrupted
+	if status == "started" && !active {
+		status = "interrupted"
+	}
+
 	return Task{
 		id:      TaskId(taskId),
 		workdir: taskFullDir,
@@ -488,7 +494,9 @@ func (api *TaskApiImpl) cancelTask(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	taskId := vars["taskId"]
-	task := TaskFromID(taskId)
+	//Check is task is active (i.e. pending or running)
+	_, active := api.th.m[TaskId(taskId)]
+	task := TaskFromID(taskId, active)
 
 	if task.status == "unknown" {
 		w.WriteHeader(http.StatusNotFound)
@@ -504,7 +512,10 @@ func (api *TaskApiImpl) getTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	taskId := vars["taskId"]
-	task := TaskFromID(taskId)
+
+	//Check is task is active (i.e. pending or running)
+	_, active := api.th.m[TaskId(taskId)]
+	task := TaskFromID(taskId, active)
 
 	if task.status == "unknown" {
 		w.WriteHeader(http.StatusNotFound)
@@ -519,7 +530,9 @@ func (api *TaskApiImpl) downloadResult(w http.ResponseWriter, r *http.Request, F
 	vars := mux.Vars(r)
 	taskId := vars["taskId"]
 
-	task := TaskFromID(taskId)
+	//Check is task is active (i.e. pending or running)
+	_, active := api.th.m[TaskId(taskId)]
+	task := TaskFromID(taskId, active)
 	if task.status == "unknown" {
 		w.WriteHeader(http.StatusNotFound)
 	} else {
@@ -585,7 +598,9 @@ func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskId := vars["taskId"]
 
-	task := TaskFromID(taskId)
+	//Check is task is active (i.e. pending or running)
+	_, active := api.th.m[TaskId(taskId)]
+	task := TaskFromID(taskId, active)
 	if task.status == "unknown" {
 		w.WriteHeader(http.StatusNotFound)
 	} else {
@@ -620,8 +635,9 @@ func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
 			} else if t.status == "prepared" {
 				sendMessage(conn, "Task not yet started...\n")
 				//wait until task change status (either becomes running or canceled)
+				sendMessage(conn, "waiting for an execution slot.\n")
 				for t.status == "prepared" {
-					sendMessage(conn, "warming-up...\n")
+					sendMessage(conn, ".")
 					time.Sleep(2 * time.Second)
 				}
 				sendMessage(conn, "Task is now "+t.status+"\n")
@@ -694,6 +710,7 @@ func (api *TaskApiImpl) followTaskLogs(w http.ResponseWriter, r *http.Request) {
 					//close write to send message through websocket
 					if err := w.Close(); err != nil {
 						fmt.Println("\n🔺🔻Could not close Writer : ", err)
+						//It means that the client closed the connection (we assume it will be reconnecting eventually, so we don't interrupt the running task)
 						break
 					}
 				}

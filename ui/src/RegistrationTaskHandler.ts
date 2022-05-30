@@ -48,42 +48,78 @@ export class RegistrationTask {
         volumeFile: File, taskParams: TaskParams,
         onSubmitted: (task?: RegistrationTask) => void,
         loglines: (lines: string[]) => void,
-        onDone: (iserror: boolean, event: Event|undefined, error?: string) => void,
+        onDone: (iserror: boolean, event: Event | undefined, error?: string) => void,
     ): RegistrationTask {
 
         const task = new RegistrationTask(taskParams);
         const uploadProm = this.uploadFile(volumeFile, task);
 
+        //allow limited number of retries after a disconnection
+        const MaxRetries = 5;
+        const RetryInterval = 2500;
+
+        let retries = 0;
+
+        const connectSocketAndStream = () => {
+            const logMsgSocket = new WebSocket(
+                RegistrationTask.getApiUrlPrefix(window.location.protocol === "https:" ? "wss://" : "ws://") + '/tasks/' + task.taskId + '/logs'
+            );
+            logMsgSocket.onopen = function (event) {
+                //reset retry count after connection is (re)established
+                retries = 0;
+            }
+
+            logMsgSocket.onmessage = function (event) {
+                loglines(event.data.split("\n"))
+                //console.log(event.data);
+            };
+            logMsgSocket.onclose = function (event) {
+                retries += 1;
+
+                //FIXME: Manager does not gracefully close websocket (in lib github.com/gorilla/websocket), 
+                // thus CloseEvent.wasClean can not be used to determine what caused closing event ("natural" termination of worker after computation completed or after user's trigerred cancelation; or "unexpected" loss of network connectivity)
+
+                //Need to check status to know if Task completed succesfully or was canceled/aborted
+                task.refreshStatus()
+                    .then(
+                        () => {
+                            //Could retrieve task status, network is up and working
+
+                            if (task.isOngoing()) {
+                                //try reconnecting
+                                setTimeout(connectSocketAndStream, RetryInterval);
+
+                            } else {
+                                const finishedInError = !task.hasFinished();
+                                onDone(finishedInError, event)
+                            }
+
+                        }
+                    ).catch(
+                        () => {
+                            //Error while retrieving task status : network connectivity not restored yet
+                            if (retries > MaxRetries) {
+                                logMsgSocket.close(1001, 'Remote task assumed aborted');
+                                onDone(true, event)
+                            } else {
+                                //try reconnecting
+                                setTimeout(connectSocketAndStream, RetryInterval);
+                            }
+                        }
+                    );
+
+            };
+            logMsgSocket.onerror = function (event) {
+                console.debug("logMsgSocket.on ERROR", retries, event);
+            };
+
+        };
+
         uploadProm.then(function (response) {
             //console.log(response);
             task.taskId = response.data.taskId;
 
-            setTimeout(() => {
-                const logMsgSocket = new WebSocket(
-                    RegistrationTask.getApiUrlPrefix("ws://") + '/tasks/' + task.taskId + '/logs'
-                );
-                logMsgSocket.onmessage = function (event) {
-                    loglines(event.data.split("\n"))
-                    //console.log(event.data);
-                };
-                logMsgSocket.onclose = function (event) {
-                    //console.debug("logMsgSocket.onclose", event);
-
-                    //Need to check status to know if Task completed succesfully or was canceled
-                    task.refreshStatus()
-                        .then(
-                            () => onDone(!task.hasFinished(), event)
-                        ).catch(
-                            () => onDone(true, event)
-                        );
-
-                };
-                logMsgSocket.onerror = function (event) {
-                    console.debug("logMsgSocket.onerror", event);
-                    onDone(true, undefined, event.toString());
-                };
-
-            }, 10);
+            setTimeout(connectSocketAndStream, 10);
             onSubmitted(task);
         })
             .catch(function (error) {
@@ -125,16 +161,16 @@ export class RegistrationTask {
         );
     }
 
-    static downloadAsBlob(url: string, 
-        onDownloaded: (filename:string, data: Blob) => void) {
+    static downloadAsBlob(url: string,
+        onDownloaded: (filename: string, data: Blob) => void) {
         return axios({
-              url,
-              method: 'GET',
-              responseType: 'blob', 
-            }).then((response) => {
-                const filename = response.headers['content-disposition']?.split(/;\s+filename=/)[1];
-                onDownloaded?.call(null, filename, response.data);
-            })
+            url,
+            method: 'GET',
+            responseType: 'blob',
+        }).then((response) => {
+            const filename = response.headers['content-disposition']?.split(/;\s+filename=/)[1];
+            onDownloaded?.call(null, filename, response.data);
+        })
             .catch(function (error) {
                 console.log(error);
             });
@@ -152,6 +188,10 @@ export class RegistrationTask {
 
     hasStarted() {
         return this.taskId != null;
+    };
+
+    isOngoing() {
+        return this.taskStatus === 'pending' || this.taskStatus === 'started';
     };
 
     hasFinished() {
@@ -185,23 +225,20 @@ export class RegistrationTask {
             .then((response) => {
                 this.taskStatus = response.data.status;
             })
-            .catch(function (error) {
-                console.log(error);
-            });
     };
 
-    downloadRegistered(onDownloaded: (filename:string, data: Blob) => void) {
+    downloadRegistered(onDownloaded: (filename: string, data: Blob) => void) {
         return axios({
-              url: this.getDownloadRegisteredtUrl(),
-              method: 'GET',
-              responseType: 'blob', 
-            }).then((response) => {
-                let filename = response.headers['content-disposition']?.split(/;\s+filename=/)[1];
-                if (!filename) {
-                    filename = 'result.nii'
-                }
-                onDownloaded?.call(null, filename, response.data);
-            })
+            url: this.getDownloadRegisteredtUrl(),
+            method: 'GET',
+            responseType: 'blob',
+        }).then((response) => {
+            let filename = response.headers['content-disposition']?.split(/;\s+filename=/)[1];
+            if (!filename) {
+                filename = 'result.nii'
+            }
+            onDownloaded?.call(null, filename, response.data);
+        })
             .catch(function (error) {
                 console.log(error);
             });

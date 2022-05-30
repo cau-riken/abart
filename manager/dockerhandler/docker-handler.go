@@ -41,7 +41,7 @@ func FollowContainerLogs(
 	}
 }
 
-//should be called before ContainerStart() to be abled to read streams from beginning
+//should be called before ContainerStart() to be able to read streams from beginning
 func AttachContainerAndStream(
 	containerRef string,
 ) {
@@ -83,6 +83,11 @@ func AttachContainerAndStream(
 
 	go func() {
 		//wait for both streams to be closed before closing attach response
+
+
+		//FIXME gracefully close the logs socket, but it is not handled by the websocket lib
+		//https://github.com/gorilla/websocket/issues/448
+
 		defer resp.Close()
 		wg.Wait()
 		fmt.Println("end of streams : ", containerRef)
