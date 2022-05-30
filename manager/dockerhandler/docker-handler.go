@@ -137,9 +137,11 @@ func RunContainer(
 			Env:          newEnv,
 			WorkingDir:   workingDir,
 		},
-		//volume binding
 		&container.HostConfig{
+			//volume binding
 			Binds: []string{strings.Join([]string{volumeName, workingDirBasePath, "rw"}, ":")},
+			//remove container when it exits
+			AutoRemove: true,
 		},
 		nil,
 		nil,
@@ -200,9 +202,6 @@ func StopNRemoveContainer(
 		if err != nil {
 			fmt.Println("Could not stop container :", err)
 		}
-		err = cli.ContainerRemove(ctx, containerName, types.ContainerRemoveOptions{})
-		if err != nil {
-			fmt.Println("Could not remove container :", err)
-		}
+		//No cleaning needed: container are started with auto-remove options
 	}
 }
