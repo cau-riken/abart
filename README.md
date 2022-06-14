@@ -10,9 +10,41 @@ It is implemented following a multi-container architecture, since actual registr
 
 <br/>
 
-## Run in "Desktop" mode 
+## Run in "Desktop" mode
 
-**Prerequisite**: `git` and `docker` must be installed and working.
+### **Prerequisites**, that must be installed and working
+
+* For linux Users:  
+ `git` and `docker`
+
+* For macOS Users:  
+ `git` and **Docker Desktop**
+
+* For Windows Users:  
+ `wsl2` and **Docker Desktop**
+
+___
+
+#### **Extra steps for MS-Windows user only**
+
+AbART is run under WSL (Windows Subsystem for Linux), allowing to use the same commands as the Linux and macOS ones (described in next section).  
+Therefore, a few extra steps are necessary to properly setup `wsl` and Docker Desktop, as follow:
+
+* Install `wsl` (see <https://docs.microsoft.com/en-us/windows/wsl/install>), then set default version to 2 (`wsl --set-default-version 2`).
+* Then install a linux distro from Microsoft store (<https://aka.ms/wslstore>).
+Note: Since Docker WSL integration relies on `glibc`, we recommend to use **Ubuntu 22.04LTS** over the lighter Alpine distro that won't work by default for our purpose.
+* Set the linux distro including glibc as the default one (e.g. `wsl --set-default Ubuntu-22.04`), and ensure that Docker integration WSL with default distro is enabled (see <https://docs.docker.com/desktop/windows/wsl/#enabling-docker-support-in-wsl-2-distros>).
+
+* Note: Several reboots might be necessary after installation of the different components.
+
+* Start a new terminal running the default distro (shortcut [Windows]+R, then type `wsl`),
+* ( Depending on the distro used, `git` needs to be installed if not shipped by default. )
+
+* Execute the following commands in at the `wsl` terminal prompt.
+
+___
+
+### Steps to follow
 
 1. clone this repo to get the scripts :
 
@@ -44,6 +76,7 @@ cd abart
 
 * Linux Ubuntu 22.04lts, Docker Engine v20.10.8 / Firefox 100 & Chromium 101.
 * macOs Big Sur 11.6.6, Docker Desktop v4.8.2 (Docker Engine v20.10.14) / Firefox 91.9.1esr & Chrome 101 & Safari 15.5, but for performance reasons, the use of **Safari is not recommended**.
+* Windows 10.0 (build 19043), Docker Desktop v4.9.0 (WSL2) / Firefox v101.0.1 & Edge v102.0.1245.39
 
 
 ## Usage
