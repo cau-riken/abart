@@ -830,7 +830,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                 {
                                     e.message
                                         ?
-                                        <p>Reason:<pre>{e.message}</pre></p>
+                                        <p>Reason:<pre style={{whiteSpace: 'pre-wrap'}}>{e.message}</pre></p>
                                         :
                                         <span>"Please check it is a valid NIFTi file."</span>
                                 }
@@ -889,7 +889,7 @@ const VolumePreview = (props: VolumePreviewProps) => {
                                             {
                                                 e.message
                                                     ?
-                                                    <p>Reason:<pre>{e.message}</pre></p>
+                                                    <p>Reason:<pre style={{whiteSpace: 'pre-wrap'}}>{e.message}</pre></p>
                                                     :
                                                     null
                                             }
