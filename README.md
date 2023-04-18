@@ -23,6 +23,14 @@ It is implemented following a multi-container architecture, since actual registr
 * For Windows Users:  
  `wsl2` and **Docker Desktop**
 
+
+**Important note:**
+
+Be sure that you and your organization comply with the licensing terms of Docker, especially if you are intending to use **Docker Desktop**.
+
+see: 
+* https://www.docker.com/pricing/faq/#subscriptionandlicensing
+* https://www.docker.com/legal/docker-subscription-service-agreement/
 ___
 
 #### **Extra steps for MS-Windows user only**
